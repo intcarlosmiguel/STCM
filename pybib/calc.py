@@ -4,7 +4,7 @@ import numpy as np
 from scipy import stats
 
 def load_gml(file_path):
-    labels = {}
+    df = {}
     edges = []
     is_edge = False
     edges = []
@@ -62,7 +62,6 @@ def apagar_nos_com_grau_zero(grafo):
     grafo.remove_nodes_from(nos_grau_zero)
     
     return grafo
-
 def calcular_graus_por_categoria(grafo, categoria):
     """
     Calcula o grau de entrada (in-degree) e o grau de saída (out-degree) para nós de uma categoria específica.
@@ -93,14 +92,57 @@ def calcular_graus_por_categoria(grafo, categoria):
             graus_out.append(out_degree)
     
     return np.array(graus_in),np.array(graus_out)
+
 def histogram(x):
     arr = np.arange(1,np.max(x))
     hist = np.zeros(len(arr))
     for i in x:
         for j in range(len(arr)):
-            if(i < arr[j]):
+            if(i <= arr[j]):
                 hist[j] += 1
                 break
     arr = arr[hist!=0]
     hist = hist[hist!=0]
     return arr,hist
+def contar_ligacoes_in_por_categoria(grafo):
+    """
+    Cria um vetor onde cada coluna representa o número de ligações de entrada 
+    que o nó tem com cada categoria de nós (peso 0 ou peso 1).
+    
+    Parâmetros:
+    - grafo: Um grafo direcionado (DiGraph) do networkx onde cada nó tem peso 0 ou 1.
+    
+    Retorna:
+    - Um dicionário onde a chave é o nó e o valor é uma tupla (ligacoes_com_peso_0, ligacoes_com_peso_1).
+    """
+    resultado = {}
+    
+    # Itera sobre todos os nós no grafo
+    for no in grafo.nodes:
+        ligacoes_com_peso_0 = 0
+        ligacoes_com_peso_1 = 0
+        
+        # Pega os nós que têm arestas direcionadas para o nó atual (in-degree)
+        nos_de_entrada = grafo.predecessors(no)
+        
+        # Conta quantas ligações de entrada vêm de nós com peso 0 ou 1
+        for predecessor in nos_de_entrada:
+            peso_predecessor = grafo.nodes[predecessor].get('weight', None)
+            if peso_predecessor == 0:
+                ligacoes_com_peso_0 += 1
+            elif peso_predecessor == 1:
+                ligacoes_com_peso_1 += 1
+        
+        # Armazena o resultado no dicionário
+        resultado[no] = (ligacoes_com_peso_0, ligacoes_com_peso_1)
+    
+    return np.array(list(resultado.values()))
+def generate_distribution_byfaixas(contagem,faixas):
+
+    graus = np.sum(contagem,axis = 1)
+    contagem = contagem[graus>0]
+    faixas = faixas[graus>0]
+    graus = graus[graus>0]
+    B = contagem/(np.sum(contagem,axis = 1)[:, np.newaxis])
+    B = [np.mean(B[faixas == i,:],axis = 0) for i in np.unique(faixas)]
+    return B
