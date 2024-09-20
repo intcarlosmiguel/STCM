@@ -146,3 +146,36 @@ def generate_distribution_byfaixas(contagem,faixas):
     B = contagem/(np.sum(contagem,axis = 1)[:, np.newaxis])
     B = [np.mean(B[faixas == i,:],axis = 0) for i in np.unique(faixas)]
     return B
+def contar_ligacoes_out_por_categoria(grafo):
+    """
+    Cria um vetor onde cada coluna representa o número de ligações de saída 
+    que o nó tem com cada categoria de nós (peso 0 ou peso 1).
+    
+    Parâmetros:
+    - grafo: Um grafo direcionado (DiGraph) do networkx onde cada nó tem peso 0 ou 1.
+    
+    Retorna:
+    - Um dicionário onde a chave é o nó e o valor é uma tupla (ligacoes_com_peso_0, ligacoes_com_peso_1).
+    """
+    resultado = {}
+    
+    # Itera sobre todos os nós no grafo
+    for no in grafo.nodes:
+        ligacoes_com_peso_0 = 0
+        ligacoes_com_peso_1 = 0
+        
+        # Pega os nós que têm arestas direcionadas a partir do nó atual (out-degree)
+        nos_de_saida = grafo.successors(no)
+        
+        # Conta quantas ligações de saída vão para nós com peso 0 ou 1
+        for sucessor in nos_de_saida:
+            peso_sucessor = grafo.nodes[sucessor].get('weight', None)
+            if peso_sucessor == 0:
+                ligacoes_com_peso_0 += 1
+            elif peso_sucessor == 1:
+                ligacoes_com_peso_1 += 1
+        
+        # Armazena o resultado no dicionário
+        resultado[no] = (ligacoes_com_peso_0, ligacoes_com_peso_1)
+    
+    return np.array(list(resultado.values()))
