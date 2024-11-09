@@ -7,18 +7,30 @@
 #include "bib/mtwister.h"
 #include "bib/calc.h"
 #include "bib/LCM.h"
-//#include "bib/define.h"
 
 
 
-int main(int argc,char *argv[ ]){
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+int main(int argc, char *argv[]) {
+    // Verificar se todos os argumentos necessários estão presentes
+    if (argc < 5) {
+        fprintf(stderr, "Erro: Número insuficiente de argumentos.\n");
+        fprintf(stderr, "Uso: %s <seed> <N> <is_undirect> <redes> <prob>\n", argv[0]);
+        return 1;
+    }
+    
     int seed = atoi(argv[1]);
     int N = atoi(argv[2]);
-    int categorias = atoi(argv[3]);
-    bool is_undirect = atoi(argv[4]);
-    int redes = atoi(argv[5]);
-    double prob = atof(argv[6])/100;
-    generate_local_configuration_model(N,categorias,is_undirect,prob ,redes,seed);
+    bool is_undirect = atoi(argv[3]);
+    int redes = atoi(argv[4]);
+    double prob = atof(argv[5]) / 100;
 
+    // Chamar a função de geração do modelo com os parâmetros validados
+    generate_local_configuration_model(N, is_undirect, prob, redes, seed);
     
+    return 0;
 }
+

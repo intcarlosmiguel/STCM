@@ -4,7 +4,7 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/home/carlos/igraph/**"
+                "/home/miguel/igraph/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

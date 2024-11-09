@@ -94,7 +94,7 @@ def calcular_graus_por_categoria(grafo, categoria):
     return np.array(graus_in),np.array(graus_out)
 
 def histogram(x):
-    arr = np.arange(1,np.max(x))
+    arr = np.arange(np.max(x))
     hist = np.zeros(len(arr))
     for i in x:
         for j in range(len(arr)):

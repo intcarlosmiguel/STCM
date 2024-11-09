@@ -6,12 +6,11 @@
 #include <string.h>
 #include <math.h>
 #include <igraph.h>
-
+#include <stdint.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #define M_PI 3.14159265358979323846
-
 
 void swap(int *a, int *b){
     int temp = *a;
@@ -82,10 +81,14 @@ void generate_multinomial(int n, int k, double *probabilities, int *outcomes) {
     // O último valor é determinado pelo resto
 }
 
-int empiric_distribution(double* distribution){
+int empiric_distribution(double* distribution,int limit){
     double r = genrand64_real1();
     int n = 0;
-    while(r > distribution[n]) n++;
+    while(r > distribution[n]){
+        n++;
+        if(n > limit) return 0;
+    }
+    
     return n;
 }
 
@@ -168,4 +171,9 @@ void mergeSort(int *temp_weights, int *labels, int l, int r) {
         // Combina as duas metades
         merge(temp_weights, labels, l, m, r);
     }
+}
+int somatorio(int** array,int elemento,int N){
+    int soma = 0;
+    for (int i = 0; i < N; i++) soma += array[elemento][i];
+    return soma;
 }
