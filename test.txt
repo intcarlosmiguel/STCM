@@ -50,7 +50,7 @@ void free_CONSTANT(struct constant *CONSTANT,int categorias,bool is_undirect){
     free(CONSTANT->p_faixas);
 }
 
-void init_MCE(struct constant *CONSTANT,struct mce *MCE,struct Graph *G,igraph_vector_t* faixas,bool is_undirect,int categorias){
+void init_MCE(struct constant *CONSTANT,struct mce *MCE,int* n_faixas,int** site_per_faixas,struct Graph *G,igraph_vector_t* faixas,bool is_undirect,int categorias){
     int i,j,k;
     double r;
     MCE->categorias = categorias;
@@ -112,6 +112,10 @@ void init_MCE(struct constant *CONSTANT,struct mce *MCE,struct Graph *G,igraph_v
         G->viz[i][0] = 0;
         if(!is_undirect)generate_multinomial(grau_in[site], MCE->categorias, CONSTANT->prob_in[faixas2[site]], MCE->degree_in[i]);
         VECTOR(*faixas)[i] = faixas2[site];
+        
+        n_faixas[faixas2[site]]++;
+        site_per_faixas[faixas2[site]] = realloc(site_per_faixas[faixas2[site]],n_faixas[faixas2[site]]*sizeof(int));
+        site_per_faixas[faixas2[site]][n_faixas[faixas2[site]] - 1] = i;
     }
     free(faixas2);
     free(grau_out);
@@ -377,8 +381,11 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     igraph_vector_init(&faixas, G.Nodes);
     init_CONSTANT(&CONSTANT,is_undirect,&categorias);
     MCE.categorias = categorias;
+    int* n_faixas = calloc(categorias,sizeof(int));
+    int** site_per_faixas = (int**) malloc(categorias*sizeof(int*));
+    for (i = 0; i < MCE.categorias; i++) site_per_faixas[i] = (int*) malloc(0*sizeof(int));
     
-    init_MCE(&CONSTANT,&MCE,&G,&faixas,is_undirect,categorias);
+    init_MCE(&CONSTANT,&MCE,n_faixas,site_per_faixas,&G,&faixas,is_undirect,categorias);
     MCE.is_undirect = is_undirect;
     //load_test(&MCE,n_faixas,site_per_faixas,&faixas,N,&G);
     free_CONSTANT(&CONSTANT,categorias,is_undirect);
@@ -411,70 +418,53 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     uint8_t faixa;
     int vizinho;
     uint8_t faixa1;
+    //printf("Erro 4!\n");
     for (site = 0; site < N; site++){
         f = VECTOR(faixas)[site];
         for (faixa = 0; faixa < categorias; faixa++){
             seed++;
 
             if(MCE.degree_out[site][faixa] == 0) continue;
-            if(n_faixas2[faixa][f] == 0) break;
+
             site_per_faixas2[faixa][f] = randomize(site_per_faixas2[faixa][f], n_faixas2[faixa][f],seed);
             G = weighted_add_edge(&G,1,&MCE,n_faixas2[faixa],site_per_faixas2[faixa][f],site,faixa,&faixas,&edges);
-            if(MCE.degree_out[site][faixa] == 0){
-                for (i = 0; i < n_faixas2[f][faixa]; i++) if( site_per_faixas2[f][faixa][i] == site) break;
-                site_per_faixas2[f][faixa] = remove_element(site_per_faixas2[f][faixa],n_faixas2[f][faixa],i);
-                n_faixas2[f][faixa]--;
-            }
         }
-        if(p > 0){
-            int** n_faixas_vizinhos = calloc(categorias,sizeof(int*));
-            int*** site_per_faixas_vizinhos = malloc(categorias*sizeof(int**));
-
-            for ( i = 0; i < MCE.categorias; i++){
-                n_faixas_vizinhos[i] = calloc(categorias,sizeof(int));
-                site_per_faixas_vizinhos[i] = malloc(categorias*sizeof(int*));
-                for ( j = 0; j < MCE.categorias; j++)site_per_faixas_vizinhos[i][j] = malloc(0*sizeof(int));
-                
-            }
-
-            for(i = 0; i <  G.viz[site][0]; i++){
-                vizinho = G.viz[site][i+1];
-
-                f = VECTOR(faixas)[vizinho];
-                for(j = 0;j < MCE.categorias;j++){
-                    if(MCE.degree_out[vizinho][j] != 0){
-                        n_faixas_vizinhos[f][j]++;
-                        site_per_faixas_vizinhos[f][j] = realloc(site_per_faixas_vizinhos[f][j],n_faixas_vizinhos[f][j]*sizeof(int));
-                        site_per_faixas_vizinhos[f][j][n_faixas_vizinhos[f][j] - 1] = vizinho;
-                    }
-                }
-                
-            }
+        /* if(p > 0){
+            int **vizinhos = (int**) malloc(categorias*sizeof(int*));
+            int *q_vizinhos = (int*) calloc(categorias,sizeof(int));
+            for (i = 0; i < categorias; i++) vizinhos[i] = (int*) malloc(0*sizeof(int));
+            int n = 0;
+            
             for (i = 0; i < G.viz[site][0]; i++){
+                
                 vizinho = G.viz[site][i+1];
-                f = VECTOR(faixas)[vizinho];
-                for (faixa = 0; faixa < categorias; faixa++){
-                    seed++;
-
-                    if(MCE.degree_out[vizinho][faixa] == 0) continue;
-                    if(n_faixas_vizinhos[faixa][f] == 0) break;
-                    site_per_faixas_vizinhos[faixa][f] = randomize(site_per_faixas_vizinhos[faixa][f], n_faixas_vizinhos[faixa][f],seed);
-                    G = weighted_add_edge(&G,p,&MCE,n_faixas_vizinhos[faixa],site_per_faixas_vizinhos[faixa][f],vizinho,faixa,&faixas,&edges);
-                    if(MCE.degree_out[vizinho][faixa] == 0){
-                        for (k = 0; k < n_faixas_vizinhos[f][faixa]; k++) if( site_per_faixas_vizinhos[f][faixa][k] == vizinho) break;
-                        site_per_faixas_vizinhos[f][faixa] = remove_element(site_per_faixas_vizinhos[f][faixa],n_faixas_vizinhos[f][faixa],k);
-                        n_faixas_vizinhos[f][faixa]--;
+                if(vizinho < 0) continue;
+                if(somatorio(MCE.degree_out,vizinho,categorias) !=0){
+                    faixa1 = (int)VECTOR(faixas)[vizinho];
+                    q_vizinhos[faixa1]++;
+                    vizinhos[faixa1] = realloc(vizinhos[faixa1],q_vizinhos[faixa1]*sizeof(int));
+                    vizinhos[faixa1][q_vizinhos[faixa1] - 1] = vizinho;
+                    n++;
+                }
+            }
+            if(n > 1){
+                
+                for (i = 0; i < G.viz[site][0]; i++){
+                    vizinho = G.viz[site][i+1];
+                    
+                    if(vizinho < 0) continue;
+                    for (faixa = 0; faixa < categorias; faixa++){
+                        seed++;
+                        if(MCE.degree_out[vizinho][faixa] == 0) continue;
+                        vizinhos[faixa] = randomize(vizinhos[faixa], q_vizinhos[faixa],seed);
+                        G = weighted_add_edge(&G,p,&MCE,q_vizinhos,vizinhos,vizinho,faixa,&faixas,&edges);
                     }
                 }
             }
-            for (i = 0; i < categorias; i++) {
-                for (j = 0; j < categorias; j++)if(n_faixas_vizinhos[i][j]!=0) free(site_per_faixas_vizinhos[i][j]);
-                free(n_faixas_vizinhos[i]);
-                free(site_per_faixas_vizinhos[i]);
-            }
-            free(n_faixas_vizinhos);
-            free(site_per_faixas_vizinhos);
-        } 
+            for(i = 0; i < categorias; i++) free(vizinhos[i]);
+            free(vizinhos);
+            free(q_vizinhos);
+        } */
 
     }
     
@@ -485,21 +475,25 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     igraph_add_edges(&Grafo, &edges, NULL);
     
     *perca = generate_conections(&G,&MCE,&faixas,p,&Grafo);
+    printf("Perca: %f\n",*perca);
     for (i = 0; i < G.Nodes; i++){
         if(!MCE.is_undirect)free(MCE.degree_in[i]);
         free(MCE.degree_out[i]);
         free(G.viz[i]);
     }
     free(G.viz);
+    for(i = 0; i < categorias; i++) free(site_per_faixas[i]);
+    free(site_per_faixas);
+    free(n_faixas);
     if(!MCE.is_undirect) free(MCE.degree_in);
     free(MCE.degree_out);
     igraph_vector_int_destroy(&edges);
     igraph_vector_destroy(&faixas);
 
     for (i = 0; i < categorias; i++) {
-        for (j = 0; j < categorias; j++)if(n_faixas2[i][j]!=0) free(site_per_faixas2[i][j]);
         free(n_faixas2[i]);
-        free(site_per_faixas2[i]);
+        for (j = 0; j < categorias; j++) free(site_per_faixas2[i][j]);
+        free(site_per_faixas2[i]); 
     }
     free(n_faixas2);
     free(site_per_faixas2);
@@ -565,10 +559,10 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
     double mediana = (N%2 == 0)? VECTOR(degrees)[(int)(N-1)/2] : (VECTOR(degrees)[(int) N/2] + VECTOR(degrees)[(int) N/2+1])*0.5;
 
     // Calcula o menor caminho médio da Rede
-    //igraph_average_path_length(Grafo, &caminho_medio, NULL, IGRAPH_UNDIRECTED, 1);
+    igraph_average_path_length(Grafo, &caminho_medio, NULL, IGRAPH_UNDIRECTED, 1);
 
     // Calcula o diâmetro da rede
-    //igraph_diameter(Grafo, &diametro, 0, 0, 0, 0, IGRAPH_UNDIRECTED, 1);
+    igraph_diameter(Grafo, &diametro, 0, 0, 0, 0, IGRAPH_UNDIRECTED, 1);
 
     // Calcula o agrupamento médio
     igraph_transitivity_avglocal_undirected(Grafo,&agrupamento_medio,IGRAPH_TRANSITIVITY_ZERO);
@@ -581,8 +575,8 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
     resultados[3] = agrupamento_medio;
     resultados[4] = agrupamento_total;
     resultados[5] = correlation;
-    resultados[6] = 0;
-    resultados[7] = 0;
+    resultados[6] = caminho_medio;
+    resultados[7] = diametro;
     igraph_vector_destroy(&graus);
     igraph_vector_destroy(&clustering);
     igraph_vector_int_destroy(&degrees);
@@ -603,8 +597,8 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
     
     double perca;
     int count = 0;
-    omp_set_num_threads(11);
-    #pragma omp parallel for schedule(dynamic)
+    //omp_set_num_threads(11);
+    ///#pragma omp parallel for schedule(dynamic)
     for (i = 0; i < redes; i++){
         clock_t inicio, fim;
         inicio = clock();
@@ -621,11 +615,11 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
         else{
             double agrupamento_total;
             igraph_transitivity_undirected(&G,&agrupamento_total,IGRAPH_TRANSITIVITY_NAN);
-            printf("Agrupamento: %f\n",agrupamento_total);
+            //printf("Agrupamento: %f\n",agrupamento_total);
         }
         igraph_destroy(&G);
         count++;
-        if(count%25 == 0) printf("%d/%d\n",count,redes);
+        if(count%50 == 0) printf("%d/%d\n",count,redes);
     }
 
     if(redes > 1){

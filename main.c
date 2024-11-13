@@ -8,12 +8,6 @@
 #include "bib/calc.h"
 #include "bib/LCM.h"
 
-
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-
 int main(int argc, char *argv[]) {
     // Verificar se todos os argumentos necessários estão presentes
     if (argc < 5) {
