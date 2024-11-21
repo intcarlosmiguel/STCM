@@ -5,14 +5,12 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
-#include <stdint.h>
+
 #include <omp.h>
 
 #include <igraph.h>
 #include "mtwister.h"
 #include "calc.h"
-
-
 struct Graph{
     int **viz;
     int Nodes;
@@ -25,421 +23,274 @@ struct constant{
     double** distribution_in;
     double** distribution_out;
     double* p_faixas;
-    int limit;
 };
 
 struct mce{
     bool is_undirect;
     int** degree_in;
     int** degree_out;
-    int categorias;
+    int* n_faixas;
+    int** site_per_faixas;
 };
 
 void free_CONSTANT(struct constant *CONSTANT,int categorias,bool is_undirect){
     int i;
     for (i = 0; i < categorias; i++){
-        if(!is_undirect)free(CONSTANT->prob_in[i]);
+        free(CONSTANT->prob_in[i]);
         free(CONSTANT->prob_out[i]);
-        if(!is_undirect)free(CONSTANT->distribution_in[i]);
+        free(CONSTANT->distribution_in[i]);
         free(CONSTANT->distribution_out[i]);
     }
-    if(!is_undirect) free(CONSTANT->prob_in);
+    free(CONSTANT->prob_in);
     free(CONSTANT->prob_out);
-    if(!is_undirect) free(CONSTANT->distribution_in);
+    free(CONSTANT->distribution_in);
     free(CONSTANT->distribution_out);
     free(CONSTANT->p_faixas);
 }
 
-void init_MCE(struct constant *CONSTANT,struct mce *MCE,int* n_faixas,int** site_per_faixas,struct Graph *G,igraph_vector_t* faixas,bool is_undirect,int categorias){
+void init_MCE(struct constant *CONSTANT,struct mce *MCE,struct Graph *G,int N,igraph_vector_t* faixas,bool is_undirect,int categorias){
     int i,j,k;
     double r;
-    MCE->categorias = categorias;
+    int* grau_in = (int*) calloc(N,sizeof(int));
+    int* arr = (int*) calloc(N,sizeof(int));
+    int* grau_out = (int*) calloc(N,sizeof(int));
 
-    int* arr = (int*) calloc(G->Nodes,sizeof(int));
-
-    int* grau_out = (int*) calloc(G->Nodes,sizeof(int));
-
-    int* grau_in;
-
-    int* faixas2 = (int*) calloc(G->Nodes,sizeof(int));
-
-    MCE->degree_out = (int**) malloc(G->Nodes*sizeof(int*));
-    if(!is_undirect){
-        grau_in = (int*) calloc(G->Nodes,sizeof(int));
-        MCE->degree_in = (int**) malloc(G->Nodes*sizeof(int*));
-    }
-    for (i = 0; i < G->Nodes; i++){
+    MCE->n_faixas = (int *) calloc(categorias, sizeof(int));
+    MCE->site_per_faixas = (int**) malloc(categorias*sizeof(int*));
+    MCE->degree_in = (int**) malloc(N*sizeof(int*));
+    MCE->degree_out = (int**) malloc(N*sizeof(int*));
+    for (i = 0; i < categorias; i++) MCE->site_per_faixas[i] = (int*) malloc(0*sizeof(int));
+    for (i = 0; i < N; i++){
         j = 0;
         r = genrand64_real1();
         while(r > CONSTANT->p_faixas[j]) j++;
-        faixas2[i] = j;
-        
+        VECTOR(*faixas)[i] = j;
+        MCE->n_faixas[j]++;
+        MCE->site_per_faixas[j] = realloc(MCE->site_per_faixas[j],MCE->n_faixas[j]*sizeof(int));
+        MCE->site_per_faixas[j][MCE->n_faixas[j] - 1] = i;
         k = 0;
-        MCE->degree_out[i] = (int*) calloc(MCE->categorias,sizeof(int));
-        if(is_undirect){
-            while(k == 0) k = empiric_distribution(CONSTANT->distribution_out[faixas2[i]],CONSTANT->limit);
+
+        MCE->degree_in[i] = (int*) calloc(categorias,sizeof(int));
+
+        while(k == 0) k = empiric_distribution(CONSTANT->distribution_in[ (int) VECTOR(*faixas)[i]]);
+        grau_in[i] = k;
+        if(!is_undirect){
+            MCE->degree_out[i] = (int*) calloc(categorias,sizeof(int));
+            k = 0;
+            while(k == 0)k = empiric_distribution(CONSTANT->distribution_out[ (int) VECTOR(*faixas)[i]]);
             grau_out[i] = k;
         }
-        
-        else{
-            int k1 = 0;
-            int k2 = 0;
-            MCE->degree_in[i] = (int*) calloc(MCE->categorias,sizeof(int));
-            while(k1 == 0){
-                k = empiric_distribution(CONSTANT->distribution_out[faixas2[i]],CONSTANT->limit);
-                k2 = empiric_distribution(CONSTANT->distribution_in[faixas2[i]],CONSTANT->limit);
-                k1 = k+k2;
-            }
-            grau_out[i] = k;
-            grau_in[i] = k2;
-        }
-        //printf("\n");
         arr[i] = i;
     }
-
-    int* temp_weights = (int*) calloc(G->Nodes,sizeof(int));
-    for (i = 0; i < G->Nodes; i++)temp_weights[i] = grau_out[i];
-    mergeSort(temp_weights,arr,0,G->Nodes-1);
+    int* temp_weights = (int*) calloc(N,sizeof(int));
+    for (int i = 0; i < N; i++)temp_weights[i] = grau_in[i];
+    mergeSort(temp_weights,arr,0,N-1);
     free(temp_weights);
-
     int site;
-    for (i = 0; i < G->Nodes; i++){
+    for (i = 0; i < N; i++){
+
         site = arr[i];
 
-        generate_multinomial(grau_out[site], MCE->categorias, CONSTANT->prob_out[faixas2[site]], MCE->degree_out[i]);
+        generate_multinomial(grau_in[site], categorias, CONSTANT->prob_in[(int) VECTOR(*faixas)[site]], MCE->degree_in[i]);
 
-        G->viz[i] =(int*) malloc(1*sizeof(int));
+        G->viz[i] =(int*) malloc((grau_in[site]+1)*sizeof(int));
         G->viz[i][0] = 0;
-        if(!is_undirect)generate_multinomial(grau_in[site], MCE->categorias, CONSTANT->prob_in[faixas2[site]], MCE->degree_in[i]);
-        VECTOR(*faixas)[i] = faixas2[site];
-        
-        n_faixas[faixas2[site]]++;
-        site_per_faixas[faixas2[site]] = realloc(site_per_faixas[faixas2[site]],n_faixas[faixas2[site]]*sizeof(int));
-        site_per_faixas[faixas2[site]][n_faixas[faixas2[site]] - 1] = i;
+        if(!is_undirect)generate_multinomial(grau_out[site], categorias, CONSTANT->prob_out[(int) VECTOR(*faixas)[site]], MCE->degree_out[i]);
     }
-    free(faixas2);
-    free(grau_out);
-    if(!is_undirect) free(grau_in);
-    free(arr);
-    
+    free(grau_in);
 }
 
-int* remove_element(int* vetor,int size,int i){
-    int temp = vetor[i];
-    vetor[i] = vetor[size-1];
-    vetor[size-1] = temp;
-    vetor = realloc(vetor,(size-1)*sizeof(int));
-    return vetor;
-}
+void init_CONSTANT(struct constant *CONSTANT,int categorias,bool is_undirect){
 
-void init_CONSTANT(struct constant *CONSTANT,bool is_undirect,int* category){
-    int categorias;
-    if(is_undirect) categorias = size_txt("./input/POLYMOD/faixas.txt");
-    else categorias = size_txt("./input/polblogs/faixas.txt");
     CONSTANT->p_faixas = (double *) calloc(categorias, sizeof(double));
-    CONSTANT->distribution_out = (double**) malloc(categorias*sizeof(double*));
-    CONSTANT->prob_out = (double**) malloc(categorias*sizeof(double*));
+    CONSTANT->distribution_in = (double**) malloc(categorias*sizeof(double*));
+    CONSTANT->prob_in = (double**) malloc(categorias*sizeof(double*));
     int i,j;
     int N;
     char filename[200];
     FILE *file,*arquivo,*datei;
 
-    if(is_undirect)arquivo = fopen("./input/POLYMOD/multi_probability_out.txt","r");
-    else arquivo = fopen("./input/polblogs/multi_probability_out.txt","r");
-
-    if(is_undirect) datei = fopen("./input/POLYMOD/faixas.txt","r");
+    if(is_undirect)arquivo = fopen("./input/multi_probability_in.txt","r");
+    else arquivo = fopen("./input/polblogs/multi_probability_in.txt","r");
+    if(is_undirect) datei = fopen("./input/polblogs/faixas.txt","r");
     else datei = fopen("./input/polblogs/faixas.txt","r");
     int a;
     for (i = 0; i < categorias; i++){
-
-        if(is_undirect) sprintf(filename,"./input/POLYMOD/distribution_%d_out.txt",i);
-        else sprintf(filename,"./input/polblogs/distribution_%d_out.txt",i);
-
+        if(is_undirect) sprintf(filename,"./input/distribution_%d_in.txt",i);
+        else sprintf(filename,"./input/polblogs/distribution_%d_in.txt",i);
         file = fopen(filename,"r");
 
         N = size_txt(filename);
-        CONSTANT->limit = N;
-        CONSTANT->distribution_out[i] = (double*) calloc(N,sizeof(double));
-        for (j = 0; j < N; j++) if(fscanf(file, "%d %lf\n",&a, &CONSTANT->distribution_out[i][j]));
-        
-        CONSTANT->prob_out[i] = (double*) malloc(sizeof(double)*categorias);
+        CONSTANT->distribution_in[i] = (double*) calloc(N,sizeof(double));
+        for (j = 0; j < N; j++) if(fscanf(file, "%d %lf\n",&a, &CONSTANT->distribution_in[i][j]));
 
-        for(j = 0; j < categorias; j++) if(fscanf(arquivo, "%lf ", &CONSTANT->prob_out[i][j]));
+        CONSTANT->prob_in[i] = (double*) malloc(sizeof(double)*categorias);
+
+        for(j = 0; j < categorias; j++) if(fscanf(arquivo, "%lf ", &CONSTANT->prob_in[i][j]));
         if(fscanf(arquivo, "\n"));
         if(fscanf(datei, "%lf\n", &CONSTANT->p_faixas[i]));
         
         fclose(file);
 
     }
+    for ( j = 0; j < categorias; j++) for (i = 1; i < categorias; i++) CONSTANT->prob_in[j][i] += CONSTANT->prob_in[j][i-1];
+
+    for (i = 1; i < categorias; i++) CONSTANT->p_faixas[i] += CONSTANT->p_faixas[i-1];
 
     fclose(arquivo);
-    fclose(datei);
-
     if(!is_undirect){
-        arquivo = fopen("./input/polblogs/multi_probability_in.txt","r");
-        CONSTANT->distribution_in = (double**) malloc(categorias*sizeof(double*));
-        CONSTANT->prob_in = (double**) malloc(categorias*sizeof(double*));
-
+        CONSTANT->distribution_out = (double**) malloc(categorias*sizeof(double*));
+        CONSTANT->prob_out = (double**) malloc(categorias*sizeof(double*));
+        if(is_undirect)arquivo = fopen("./input/multi_probability_out.txt","r");
+        else arquivo = fopen("./input/polblogs/multi_probability_out.txt","r");
         for (i = 0; i < categorias; i++){
-            sprintf(filename,"./input/polblogs/distribution_%d_in.txt",i);
+            if(is_undirect) sprintf(filename,"./input/distribution_%d_out.txt",i);
+            else sprintf(filename,"./input/polblogs/distribution_%d_out.txt",i);
             file = fopen(filename,"r");
 
             N = size_txt(filename);
+            CONSTANT->distribution_out[i] = (double*) calloc(N,sizeof(double));
+            for (j = 0; j < N; j++) if(fscanf(file, "%d %lf\n",&a, &CONSTANT->distribution_out[i][j]));
 
-            CONSTANT->distribution_in[i] = (double*) calloc(N,sizeof(double));
-            for (j = 0; j < N; j++) if(fscanf(file, "%d %lf\n",&a, &CONSTANT->distribution_in[i][j]));
+            CONSTANT->prob_out[i] = (double*) malloc(sizeof(double)*categorias);
 
-            CONSTANT->prob_in[i] = (double*) malloc(sizeof(double)*categorias);
-
-            for(j = 0; j < categorias; j++) if(fscanf(arquivo, "%lf ", &CONSTANT->prob_in[i][j]));
-
+            for(j = 0; j < categorias; j++) if(fscanf(arquivo, "%lf ", &CONSTANT->prob_out[i][j]));
             if(fscanf(arquivo, "\n"));
             fclose(file);
         }
-        for ( j = 0; j < categorias; j++) for (i = 1; i < categorias; i++) CONSTANT->prob_in[j][i] += CONSTANT->prob_in[j][i-1];
+        for ( j = 0; j < categorias; j++) for (i = 1; i < categorias; i++) CONSTANT->prob_out[j][i] += CONSTANT->prob_out[j][i-1];
         fclose(arquivo);
     }
-    for ( j = 0; j < categorias; j++) for (i = 1; i < categorias; i++) CONSTANT->prob_out[j][i] += CONSTANT->prob_out[j][i-1];
-    for (i = 1; i < categorias; i++) CONSTANT->p_faixas[i] += CONSTANT->p_faixas[i-1];
-    *category = categorias;
-}
-
-void print_lig(struct mce *MCE, igraph_vector_t* faixas,int N){
-    int i,j;
-    int** matriz_out = (int**) malloc(MCE->categorias*sizeof(int*));
-    int** matriz_in = (int**) malloc(MCE->categorias*sizeof(int*));
-
-    for (i = 0; i < MCE->categorias; i++) matriz_out[i] = (int*) calloc(MCE->categorias,sizeof(int));
-
-    if(!MCE->is_undirect) for (i = 0; i < MCE->categorias; i++) matriz_in[i] = (int*) calloc(MCE->categorias,sizeof(int));
-    for (i = 0; i < N; i++){
-        //for (j = 0; j < 5; j++) matriz[(int) VECTOR(*faixas)[i]][j] += degree[i][j];
-        for (j = 0; j < MCE->categorias; j++) matriz_out[(int) VECTOR(*faixas)[i]][j] += MCE->degree_out[i][j];
-        if(!MCE->is_undirect){
-            for (j = 0; j < MCE->categorias; j++) matriz_in[(int) VECTOR(*faixas)[i]][j] += MCE->degree_in[i][j];
-        }
-    }
-    printf("\n");
-    // Create a for to print the matrix matriz_out
-    for (i = 0; i < MCE->categorias; i++){
-        for (j = 0; j < MCE->categorias; j++) printf("%d ", matriz_out[i][j]);
-        printf("\n");
-    }
-    printf("\n");
-    if(!MCE->is_undirect){
-        for (i = 0; i < MCE->categorias; i++){
-            for (j = 0; j < MCE->categorias; j++) printf("%d ", matriz_in[i][j]);
-            printf("\n");
-        }
-        printf("\n");
-    }
-    
-    for (i = 0; i < MCE->categorias; i++) free(matriz_out[i]);
-    free(matriz_out);
 
 }
 
-double generate_conections(struct Graph *G,struct mce *MCE, igraph_vector_t* faixas,double p,igraph_t* Grafo){
-    double ligacoes_total = 0;
-    int i,j;
+int somatorio(int** array,int elemento,int N){
+    int soma = 0;
+    for (int i = 0; i < N; i++) soma += array[elemento][i];
+    return soma;
+}
 
+void append_vizinhos(struct Graph *G,int site,int vizinho,int plus){
+    G->viz[site][0]++;
+    G->viz[vizinho][0]++;
+    G->viz[site] = (int*) realloc(G->viz[site],(G->viz[site][0]+1)*sizeof(int));
+    G->viz[vizinho] = (int*) realloc(G->viz[vizinho],(G->viz[vizinho][0]+1)*sizeof(int));
+    G->viz[site][G->viz[site][0]] = plus*vizinho;
+    G->viz[vizinho][G->viz[vizinho][0]] = plus*site;
+}
+
+
+double generate_conections(struct Graph *G,int** degree, igraph_vector_t* faixas,double p,igraph_t* Grafo){
+    int ligacoes_total = 0;
+    int i,j;
+    //int** matriz = (int**) malloc(5*sizeof(int*));
+    //for (i = 0; i < 5; i++) matriz[i] = (int*) calloc(5,sizeof(int));
     for (i = 0; i < G->Nodes; i++){
-        if(MCE->is_undirect){
-            ligacoes_total += somatorio(MCE->degree_out,i,MCE->categorias);
-        }
-        else{
-            ligacoes_total += somatorio(MCE->degree_out,i,MCE->categorias);
-            ligacoes_total += somatorio(MCE->degree_in,i,MCE->categorias);
-        }
+        //print_vetor(degree[i],5,sizeof(int));
+        //for (j = 0; j < 5; j++) matriz[(int) VECTOR(*faixas)[i]][j] += degree[i][j];
+        ligacoes_total += somatorio(degree,i,5);
     }
-    return (double)ligacoes_total/(2*G->edges);
+    //for (i = 0; i < 5; i++) free(matriz[i]);
+    //free(matriz);
+
+    return ligacoes_total/G->edges;
 }
 
-bool check_ligacao(struct Graph *G,int site,int vizinho){
-    int i;
-    for( i = 0;i < G->viz[site][0]; i++) if(vizinho == G->viz[site][i+1]) return true;
-    return false; 
-}
+struct Graph weighted_add_edge(struct Graph *G,double p,struct mce *MCE,int site,int faixa,igraph_vector_int_t* edges,igraph_vector_t* faixas,bool** liga){
+    int i,vizinho,faixa1;
+    faixa1 = (int) VECTOR(*faixas)[site];
+    for ( i = 0; i < MCE->n_faixas[faixa]; i++){
 
-struct Graph weighted_add_edge(struct Graph *G,double p,struct mce *MCE,int *n,int* site_per_faixas,int site,int faixa_vizinho,igraph_vector_t* faixas,igraph_vector_int_t* edges){
+        if(MCE->degree_in[site][faixa] == 0) break;
 
-    int i,vizinho,faixa_site;
-    faixa_site = (int) VECTOR(*faixas)[site];
-    for ( i = 0; i < n[faixa_site]; i++){
-        if(MCE->degree_out[site][faixa_vizinho] == 0) break;
+        vizinho = MCE->site_per_faixas[faixa][i];
 
-        vizinho = site_per_faixas[i];
-        if(vizinho < 0) continue;
         if(site == vizinho) continue;
 
         if(genrand64_real1() <= p){
-
-            if(MCE->is_undirect) if(MCE->degree_out[vizinho][faixa_site] == 0) continue; 
-            if(!MCE->is_undirect) if(MCE->degree_in[vizinho][faixa_site] == 0) continue;
-            if(check_ligacao(G,site,vizinho)) continue;
             
-            MCE->degree_out[site][faixa_vizinho]--;
+            
+            if(!MCE->is_undirect) if(MCE->degree_out[vizinho][faixa1] == 0) continue;
+            else if(MCE->degree_in[vizinho][faixa1] == 0) continue;
 
-            if(MCE->is_undirect){
-                
-                MCE->degree_out[vizinho][faixa_site]--;
-                if(MCE->degree_out[vizinho][faixa_site] == 0){
-                    site_per_faixas = remove_element(site_per_faixas,n[faixa_site],i);
-                    i--;
-                    n[faixa_site]--;
-                }
-            }
-            if(!MCE->is_undirect) MCE->degree_in[vizinho][faixa_site]--;
+            if(liga[site][vizinho]) continue;
+
+            liga[site][vizinho] = true;
+            if(MCE->is_undirect)liga[vizinho][site] = true;
+            
+            MCE->degree_in[site][faixa]--;
+
+            if(!MCE->is_undirect) MCE->degree_out[vizinho][faixa1]--;
+            else MCE->degree_in[vizinho][faixa1]--;
             
             igraph_vector_int_push_back(edges, site);
             igraph_vector_int_push_back(edges, vizinho);
 
             G->viz[site][0]++;
-            G->viz[site] = (int*) realloc(G->viz[site],(G->viz[site][0]+1)*sizeof(int));
-
+            if(MCE->is_undirect) G->viz[vizinho][0]++;
             G->viz[site][G->viz[site][0]] = vizinho;
-
-            if(MCE->is_undirect){
-                G->viz[vizinho][0]++;
-                G->viz[vizinho] = realloc(G->viz[vizinho],(G->viz[vizinho][0]+1)*sizeof(int));
-                G->viz[vizinho][G->viz[vizinho][0]] = site;
-            }
-
+            if(MCE->is_undirect) G->viz[vizinho][G->viz[vizinho][0]] = site;
             G->edges += 1;
         }
-        /* else{
+        else{
             
-            if(check_ligacao(G,site,vizinho)) continue;
-            G->viz[site][0]++;
-            G->viz[site] = (int*) realloc(G->viz[site],(G->viz[site][0]+1)*sizeof(int));
-            G->viz[site][G->viz[site][0]] = -vizinho;
-
-            if(MCE->is_undirect){
-                G->viz[vizinho][0]++;
-                G->viz[vizinho] = realloc(G->viz[vizinho],(G->viz[vizinho][0]+1)*sizeof(int));
-                G->viz[vizinho][G->viz[vizinho][0]] = -site;
-            }
-        } */
+            if(liga[site][vizinho]) continue;
+            liga[site][vizinho] = true;
+            if(MCE->is_undirect) liga[vizinho][site] = true;
+        }
     }
-    
     return *G;
 }
 
-void load_test(struct mce *MCE,int* n_faixas,int** site_per_faixas,igraph_vector_t* faixas,int N,struct Graph *G){
-
-    FILE* arquivo = fopen("./input/test/in.txt", "r");
-    if (arquivo == NULL) {
-        printf("Erro ao abrir o arquivo\n");
-    }
-    int a,b,i;
-    MCE->degree_out = (int**) malloc(N*sizeof(int*));
-    MCE->degree_in = (int**) malloc(N*sizeof(int*));
-    for (i = 0; i < N; i++) {
-        MCE->degree_in[i] = (int*) calloc(2,sizeof(int));
-        if (fscanf(arquivo, "%d %d\n", &MCE->degree_in[i][0], &MCE->degree_in[i][1]) != 2);
-        G->viz[i] =(int*) malloc(1*sizeof(int));
-        G->viz[i][0] = 0;
-    }
-    fclose(arquivo);
-
-    FILE* file = fopen("./input/test/out.txt", "r");
-    for (i = 0; i < N; i++) {
-        MCE->degree_out[i] = (int*) calloc(2,sizeof(int));
-        if (fscanf(file, "%d %d\n", &MCE->degree_out[i][0], &MCE->degree_out[i][1]) != 2);
-    }
-    fclose(file);
-    for (i = 0; i < 2; i++)site_per_faixas[i] = (int*) malloc(0*sizeof(int));
-    FILE* datei = fopen("./input/test/faixas.txt", "r");
-    for (i = 0; i < N; i++) {
-        if(fscanf(arquivo, "%d\n",&a));
-        VECTOR(*faixas)[i] = a;
-        n_faixas[a]++;
-        site_per_faixas[a] = realloc(site_per_faixas[a],n_faixas[a]*sizeof(int));
-        site_per_faixas[a][n_faixas[a] - 1] = i;
-    }
-    fclose(datei);
-
-
-}
-
-igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,double* perca){
-
-    init_genrand64(seed);
+igraph_t local_configuration_model(int N,int categorias,bool is_undirect, double p,int seed,double* perca){
 
     struct Graph G;
     struct constant CONSTANT;
     struct mce MCE;
-
     G.Nodes = N;
     G.viz = (int **)malloc(N*sizeof(int*));
-
     int i = 0,j = 0,k = 0;
+    
     G.edges = 0;
 
-    int categorias = 0;
     igraph_vector_t faixas;
     igraph_vector_init(&faixas, G.Nodes);
-    init_CONSTANT(&CONSTANT,is_undirect,&categorias);
-    MCE.categorias = categorias;
-    int* n_faixas = calloc(categorias,sizeof(int));
-    int** site_per_faixas = (int**) malloc(categorias*sizeof(int*));
-    for (i = 0; i < MCE.categorias; i++) site_per_faixas[i] = (int*) malloc(0*sizeof(int));
-    
-    init_MCE(&CONSTANT,&MCE,n_faixas,site_per_faixas,&G,&faixas,is_undirect,categorias);
+
+    init_CONSTANT(&CONSTANT,categorias,is_undirect);
+    init_MCE(&CONSTANT,&MCE,&G,N,&faixas,is_undirect,categorias);
     MCE.is_undirect = is_undirect;
-    //load_test(&MCE,n_faixas,site_per_faixas,&faixas,N,&G);
     free_CONSTANT(&CONSTANT,categorias,is_undirect);
-
-    int** n_faixas2 = calloc(categorias,sizeof(int*));
-    int*** site_per_faixas2 = malloc(categorias*sizeof(int**));
-
-    for ( i = 0; i < MCE.categorias; i++){
-        n_faixas2[i] = calloc(categorias,sizeof(int));
-        site_per_faixas2[i] = malloc(categorias*sizeof(int*));
-        for ( j = 0; j < MCE.categorias; j++)site_per_faixas2[i][j] = malloc(0*sizeof(int));
-        
-    }
-    int f;
-    for(i = 0; i < G.Nodes; i++){
-        f = VECTOR(faixas)[i];
-        for(j = 0;j < MCE.categorias;j++){
-            if(MCE.degree_out[i][j] != 0){
-                n_faixas2[f][j]++;
-                site_per_faixas2[f][j] = realloc(site_per_faixas2[f][j],n_faixas2[f][j]*sizeof(int));
-                site_per_faixas2[f][j][n_faixas2[f][j] - 1] = i;
-            }
-        }
-        
-    }
+    //for ( i = 0; i < N; i++) printf("In: %d %d, Out: %d %d\n",MCE.degree_in[i][0],MCE.degree_in[i][1],MCE.degree_out[i][0],MCE.degree_out[i][1]);
     
+
+    bool** liga = (bool**) malloc(N*sizeof(bool*));
+    for (i = 0; i < N; i++) liga[i] = (bool*) calloc(N,sizeof(bool));
     igraph_vector_int_t edges;
     igraph_vector_int_init(&edges, 0);
     int site;
     uint8_t faixa;
     int vizinho;
     uint8_t faixa1;
-    //printf("Erro 4!\n");
+    exit(0);
     for (site = 0; site < N; site++){
-        f = VECTOR(faixas)[site];
-        for (faixa = 0; faixa < categorias; faixa++){
+
+        for (faixa = 0; faixa < 5; faixa++){
             seed++;
-
-            if(MCE.degree_out[site][faixa] == 0) continue;
-
-            site_per_faixas2[faixa][f] = randomize(site_per_faixas2[faixa][f], n_faixas2[faixa][f],seed);
-            G = weighted_add_edge(&G,1,&MCE,n_faixas2[faixa],site_per_faixas2[faixa][f],site,faixa,&faixas,&edges);
+            if(MCE.degree_in[site][faixa] == 0) continue;
+            MCE.site_per_faixas[faixa] = randomize(MCE.site_per_faixas[faixa], MCE.n_faixas[faixa],seed);
+            G = weighted_add_edge(&G,1,&MCE,site,faixa,&edges,&faixas,liga);
         }
-        /* if(p > 0){
+        
+        /*if(p > 0){
             int **vizinhos = (int**) malloc(categorias*sizeof(int*));
             int *q_vizinhos = (int*) calloc(categorias,sizeof(int));
-            for (i = 0; i < categorias; i++) vizinhos[i] = (int*) malloc(0*sizeof(int));
+            for (i = 0; i < 5; i++) vizinhos[i] = (int*) malloc(0*sizeof(int));
             int n = 0;
-            
             for (i = 0; i < G.viz[site][0]; i++){
                 
                 vizinho = G.viz[site][i+1];
                 if(vizinho < 0) continue;
-                if(somatorio(MCE.degree_out,vizinho,categorias) !=0){
+                if(somatorio(degree,vizinho,categorias) !=0){
                     faixa1 = (int)VECTOR(faixas)[vizinho];
                     q_vizinhos[faixa1]++;
                     vizinhos[faixa1] = realloc(vizinhos[faixa1],q_vizinhos[faixa1]*sizeof(int));
@@ -449,54 +300,44 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
             }
             if(n > 1){
                 
-                for (i = 0; i < G.viz[site][0]; i++){
-                    vizinho = G.viz[site][i+1];
+                for (int viz = 0; viz < G.viz[site][0]; viz++){
+                    vizinho = G.viz[site][viz+1];
                     
                     if(vizinho < 0) continue;
-                    for (faixa = 0; faixa < categorias; faixa++){
+                    for (faixa = 0; faixa < 5; faixa++){
                         seed++;
-                        if(MCE.degree_out[vizinho][faixa] == 0) continue;
+                        if(degree[vizinho][faixa] == 0) continue;
                         vizinhos[faixa] = randomize(vizinhos[faixa], q_vizinhos[faixa],seed);
-                        G = weighted_add_edge(&G,p,&MCE,q_vizinhos,vizinhos,vizinho,faixa,&faixas,&edges);
+                        G = weighted_add_edge(&G,p,degree,vizinhos,q_vizinhos,vizinho,faixa,&edges,&faixas,liga);
                     }
                 }
             }
-            for(i = 0; i < categorias; i++) free(vizinhos[i]);
+            for(i = 0; i < 5; i++) free(vizinhos[i]);
             free(vizinhos);
             free(q_vizinhos);
-        } */
+        }*/
 
     }
-    
     igraph_t Grafo;
     igraph_set_attribute_table(&igraph_cattribute_table);
     if(MCE.is_undirect) igraph_empty(&Grafo, G.Nodes, IGRAPH_UNDIRECTED);
     else igraph_empty(&Grafo, G.Nodes, IGRAPH_DIRECTED);
     igraph_add_edges(&Grafo, &edges, NULL);
-    
-    *perca = generate_conections(&G,&MCE,&faixas,p,&Grafo);
-    printf("Perca: %f\n",*perca);
+    igraph_cattribute_VAN_setv(&Grafo,"faixa",&faixas);
+    //*perca = generate_conections(&G,degree,&faixas,p,&Grafo);
     for (i = 0; i < G.Nodes; i++){
-        if(!MCE.is_undirect)free(MCE.degree_in[i]);
-        free(MCE.degree_out[i]);
         free(G.viz[i]);
+        free(liga[i]);
     }
+    free(liga);
     free(G.viz);
-    for(i = 0; i < categorias; i++) free(site_per_faixas[i]);
-    free(site_per_faixas);
-    free(n_faixas);
-    if(!MCE.is_undirect) free(MCE.degree_in);
-    free(MCE.degree_out);
+    for(i = 0;i < 5;i++) free(MCE.site_per_faixas[i]);
+    free(MCE.site_per_faixas);
+    free(MCE.n_faixas);
     igraph_vector_int_destroy(&edges);
     igraph_vector_destroy(&faixas);
 
-    for (i = 0; i < categorias; i++) {
-        free(n_faixas2[i]);
-        for (j = 0; j < categorias; j++) free(site_per_faixas2[i][j]);
-        free(site_per_faixas2[i]); 
-    }
-    free(n_faixas2);
-    free(site_per_faixas2);
+    
     return Grafo;
 }
 
@@ -584,7 +425,7 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
 }
 
 
-void generate_local_configuration_model(int N,bool is_undirect,double p, int redes,int seed){
+void generate_local_configuration_model(int N,int categorias,bool is_undirect,double p, int redes,int seed){
 
     int i;
     double a;
@@ -594,40 +435,34 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
         for(i = 0; i < redes; i++) resultados[i] = (double *)calloc(10 , sizeof(double ));  // Aponta para o início de cada linha no vetor resultados
 
     }
-    
+    clock_t inicio, fim;
     double perca;
     int count = 0;
-    //omp_set_num_threads(11);
-    ///#pragma omp parallel for schedule(dynamic)
+    //omp_set_num_threads(7);
+    //#pragma omp parallel for
     for (i = 0; i < redes; i++){
-        clock_t inicio, fim;
-        inicio = clock();
+
         //if(redes!=1) printf("\e[1;1H\e[2J");
+
         igraph_t G;
-        G = local_configuration_model(N,is_undirect,p,seed+i,&perca);
-        
+        inicio = clock();
+        G = local_configuration_model(N,categorias,is_undirect,p,seed+i,&perca);
         if(redes!=1){
-            fim = clock();
             calcula_propriedades(&G,p,N,resultados[i]);
+            fim = clock();
             resultados[i][8] = ((double) (fim - inicio)) / CLOCKS_PER_SEC;
             resultados[i][9] = perca;
         }
-        else{
-            double agrupamento_total;
-            igraph_transitivity_undirected(&G,&agrupamento_total,IGRAPH_TRANSITIVITY_NAN);
-            //printf("Agrupamento: %f\n",agrupamento_total);
-        }
         igraph_destroy(&G);
-        count++;
-        if(count%50 == 0) printf("%d/%d\n",count,redes);
+        count += 1;
     }
+
 
     if(redes > 1){
         FILE *file;
         int j;
         char filecheck[800];
-        if(is_undirect)sprintf(filecheck,"./output/resultados_POYLMOD_%d_%.2f.txt",N,p);
-        else sprintf(filecheck,"./output/resultados_blogs_%d_%.2f.txt",N,p);
+        sprintf(filecheck,"./output/modelo/resultados_%d_%.2f.txt",N,p);
         file = fopen(filecheck,"w");
         char linha[10000];
         linha[0] = '\0';
@@ -635,7 +470,7 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
             
             for(j = 0; j < 10 ;j++){
                 char buffer[200]; // Buffer para armazenar a representação do número como string
-                snprintf(buffer, sizeof(buffer), "%.4f ", resultados[i][j]); // Converte o número para string com duas casas decimais
+                snprintf(buffer, sizeof(buffer), "%.2f ", resultados[i][j]); // Converte o número para string com duas casas decimais
                 strcat(linha, buffer); // Adiciona o número à string final
             }
             fprintf(file,"%s\n",linha);
@@ -647,5 +482,6 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
         for(i = 0; i < redes; i++) free(resultados[i]);
         free(resultados);
     }
+    //igraph_vector_int_destroy(&centralidade);
     printf("Terminou %d %.2f\n",N,p);
 }

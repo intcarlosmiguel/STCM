@@ -244,11 +244,11 @@ double generate_conections(struct Graph *G,struct mce *MCE, igraph_vector_t* fai
             ligacoes_total += somatorio(MCE->degree_out,i,MCE->categorias);
         }
         else{
-            ligacoes_total += somatorio(MCE->degree_out,i,MCE->categorias);
+            //ligacoes_total += somatorio(MCE->degree_out,i,MCE->categorias);
             ligacoes_total += somatorio(MCE->degree_in,i,MCE->categorias);
         }
     }
-    return (double)ligacoes_total/(2*G->edges);
+    return (double)ligacoes_total/(G->edges);
 }
 
 bool check_ligacao(struct Graph *G,int site,int vizinho){
@@ -267,7 +267,7 @@ struct Graph weighted_add_edge(struct Graph *G,double p,struct mce *MCE,int *n,i
         vizinho = site_per_faixas[i];
         if(vizinho < 0) continue;
         if(site == vizinho) continue;
-
+        //printf("Vizinho = %d\n", vizinho);
         if(genrand64_real1() <= p){
 
             if(MCE->is_undirect) if(MCE->degree_out[vizinho][faixa_site] == 0) continue; 
@@ -285,7 +285,14 @@ struct Graph weighted_add_edge(struct Graph *G,double p,struct mce *MCE,int *n,i
                     n[faixa_site]--;
                 }
             }
-            if(!MCE->is_undirect) MCE->degree_in[vizinho][faixa_site]--;
+            if(!MCE->is_undirect){
+                MCE->degree_in[vizinho][faixa_site]--;
+                if(MCE->degree_in[vizinho][faixa_site] == 0){
+                    site_per_faixas = remove_element(site_per_faixas,n[faixa_site],i);
+                    i--;
+                    n[faixa_site]--;
+                }
+            }
             
             igraph_vector_int_push_back(edges, site);
             igraph_vector_int_push_back(edges, vizinho);
@@ -303,56 +310,49 @@ struct Graph weighted_add_edge(struct Graph *G,double p,struct mce *MCE,int *n,i
 
             G->edges += 1;
         }
-        /* else{
-            
-            if(check_ligacao(G,site,vizinho)) continue;
-            G->viz[site][0]++;
-            G->viz[site] = (int*) realloc(G->viz[site],(G->viz[site][0]+1)*sizeof(int));
-            G->viz[site][G->viz[site][0]] = -vizinho;
-
-            if(MCE->is_undirect){
-                G->viz[vizinho][0]++;
-                G->viz[vizinho] = realloc(G->viz[vizinho],(G->viz[vizinho][0]+1)*sizeof(int));
-                G->viz[vizinho][G->viz[vizinho][0]] = -site;
-            }
-        } */
     }
     
     return *G;
 }
 
-void load_test(struct mce *MCE,int* n_faixas,int** site_per_faixas,igraph_vector_t* faixas,int N,struct Graph *G){
+void load_test(struct mce *MCE,igraph_vector_t* faixas,int N,struct Graph *G){
 
     FILE* arquivo = fopen("./input/test/in.txt", "r");
-    if (arquivo == NULL) {
-        printf("Erro ao abrir o arquivo\n");
-    }
-    int a,b,i;
-    MCE->degree_out = (int**) malloc(N*sizeof(int*));
-    MCE->degree_in = (int**) malloc(N*sizeof(int*));
-    for (i = 0; i < N; i++) {
-        MCE->degree_in[i] = (int*) calloc(2,sizeof(int));
-        if (fscanf(arquivo, "%d %d\n", &MCE->degree_in[i][0], &MCE->degree_in[i][1]) != 2);
-        G->viz[i] =(int*) malloc(1*sizeof(int));
+    FILE* file = fopen("./input/test/out.txt", "r");
+    FILE* datei = fopen("./input/test/faixas.txt", "r");
+    int a,b,i,idx;
+
+    int n = size_txt("./input/test/faixas.txt");
+    MCE->degree_out = (int**) malloc(N*n*sizeof(int*));
+    MCE->degree_in = (int**) malloc(N*n*sizeof(int*));
+    for (i = 0; i < N*n; i++) {
+        MCE->degree_in[i] = (int*) calloc(2, sizeof(int));
+        MCE->degree_out[i] = (int*) calloc(2,sizeof(int));
+        if (i < n) {
+            if (fscanf(arquivo, "%d %d\n", &MCE->degree_in[i][0], &MCE->degree_in[i][1]) != 2) {
+                printf("Formato de arquivo in inválido\n");
+                exit(1);
+            }
+            if (fscanf(file, "%d %d\n", &MCE->degree_out[i][0], &MCE->degree_out[i][1]) != 2){
+                printf("Formato de arquivo out inválido\n");
+                exit(1);
+            }
+            if(fscanf(datei, "%d\n",&a));
+            VECTOR(*faixas)[i] = a;
+        } 
+        else {
+            idx = i % n;
+            MCE->degree_in[i][0] = MCE->degree_in[idx][0];
+            MCE->degree_in[i][1] = MCE->degree_in[idx][1];
+            MCE->degree_out[i][0] = MCE->degree_out[idx][0];
+            MCE->degree_out[i][1] = MCE->degree_out[idx][1];
+            VECTOR(*faixas)[i] = VECTOR(*faixas)[idx];
+        }
+        G->viz[i] = (int*) malloc(sizeof(int));
         G->viz[i][0] = 0;
     }
     fclose(arquivo);
-
-    FILE* file = fopen("./input/test/out.txt", "r");
-    for (i = 0; i < N; i++) {
-        MCE->degree_out[i] = (int*) calloc(2,sizeof(int));
-        if (fscanf(file, "%d %d\n", &MCE->degree_out[i][0], &MCE->degree_out[i][1]) != 2);
-    }
     fclose(file);
-    for (i = 0; i < 2; i++)site_per_faixas[i] = (int*) malloc(0*sizeof(int));
-    FILE* datei = fopen("./input/test/faixas.txt", "r");
-    for (i = 0; i < N; i++) {
-        if(fscanf(arquivo, "%d\n",&a));
-        VECTOR(*faixas)[i] = a;
-        n_faixas[a]++;
-        site_per_faixas[a] = realloc(site_per_faixas[a],n_faixas[a]*sizeof(int));
-        site_per_faixas[a][n_faixas[a] - 1] = i;
-    }
     fclose(datei);
 
 
@@ -363,48 +363,61 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     init_genrand64(seed);
 
     struct Graph G;
-    struct constant CONSTANT;
     struct mce MCE;
-
-    G.Nodes = N;
-    G.viz = (int **)malloc(N*sizeof(int*));
-
-    int i = 0,j = 0,k = 0;
+    igraph_vector_t faixas;
+    int i = 0,j = 0,k = 0,categorias = 0,f;
     G.edges = 0;
 
-    int categorias = 0;
-    igraph_vector_t faixas;
-    igraph_vector_init(&faixas, G.Nodes);
-    init_CONSTANT(&CONSTANT,is_undirect,&categorias);
-    MCE.categorias = categorias;
-    
-    init_MCE(&CONSTANT,&MCE,&G,&faixas,is_undirect,categorias);
     MCE.is_undirect = is_undirect;
-    //load_test(&MCE,n_faixas,site_per_faixas,&faixas,N,&G);
-    free_CONSTANT(&CONSTANT,categorias,is_undirect);
+    if(is_undirect){
+        G.Nodes = N;
+        G.viz = (int **)malloc(N*sizeof(int*));
+        igraph_vector_init(&faixas, G.Nodes);
+        struct constant CONSTANT;
+        init_CONSTANT(&CONSTANT,is_undirect,&categorias);
+        MCE.categorias = categorias;
+        init_MCE(&CONSTANT,&MCE,&G,&faixas,is_undirect,categorias);
+        free_CONSTANT(&CONSTANT,categorias,is_undirect);
 
-    int** n_faixas2 = calloc(categorias,sizeof(int*));
-    int*** site_per_faixas2 = malloc(categorias*sizeof(int**));
-
-    for ( i = 0; i < MCE.categorias; i++){
-        n_faixas2[i] = calloc(categorias,sizeof(int));
-        site_per_faixas2[i] = malloc(categorias*sizeof(int*));
-        for ( j = 0; j < MCE.categorias; j++)site_per_faixas2[i][j] = malloc(0*sizeof(int));
-        
     }
-    int f;
+    else{
+        categorias = 2;
+        MCE.categorias = categorias;
+        G.viz = (int **)malloc(N*1224*sizeof(int*));
+        igraph_vector_init(&faixas, 1224*N);
+        load_test(&MCE,&faixas,N,&G);
+        N *= 1224;
+        G.Nodes = N;
+    }
+
+    int** n_faixas = calloc(categorias,sizeof(int*));
+    int*** site_per_faixas = malloc(categorias*sizeof(int**));
+    for ( i = 0; i < MCE.categorias; i++){
+        n_faixas[i] = calloc(categorias,sizeof(int));
+        site_per_faixas[i] = malloc(categorias*sizeof(int*));
+        for ( j = 0; j < MCE.categorias; j++)site_per_faixas[i][j] = malloc(0*sizeof(int));
+    }
     for(i = 0; i < G.Nodes; i++){
         f = VECTOR(faixas)[i];
         for(j = 0;j < MCE.categorias;j++){
-            if(MCE.degree_out[i][j] != 0){
-                n_faixas2[f][j]++;
-                site_per_faixas2[f][j] = realloc(site_per_faixas2[f][j],n_faixas2[f][j]*sizeof(int));
-                site_per_faixas2[f][j][n_faixas2[f][j] - 1] = i;
+            if(is_undirect){
+                if(MCE.degree_out[i][j] != 0){
+                    n_faixas[f][j]++;
+                    site_per_faixas[f][j] = realloc(site_per_faixas[f][j],n_faixas[f][j]*sizeof(int));
+                    site_per_faixas[f][j][n_faixas[f][j] - 1] = i;
+                }
+
+            }
+            if(!is_undirect){
+                if(MCE.degree_in[i][j] != 0){
+                    n_faixas[f][j]++;
+                    site_per_faixas[f][j] = realloc(site_per_faixas[f][j],n_faixas[f][j]*sizeof(int));
+                    site_per_faixas[f][j][n_faixas[f][j] - 1] = i;
+                }
             }
         }
         
     }
-    
     igraph_vector_int_t edges;
     igraph_vector_int_init(&edges, 0);
     int site;
@@ -417,13 +430,20 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
             seed++;
 
             if(MCE.degree_out[site][faixa] == 0) continue;
-            if(n_faixas2[faixa][f] == 0) break;
-            site_per_faixas2[faixa][f] = randomize(site_per_faixas2[faixa][f], n_faixas2[faixa][f],seed);
-            G = weighted_add_edge(&G,1,&MCE,n_faixas2[faixa],site_per_faixas2[faixa][f],site,faixa,&faixas,&edges);
-            if(MCE.degree_out[site][faixa] == 0){
-                for (i = 0; i < n_faixas2[f][faixa]; i++) if( site_per_faixas2[f][faixa][i] == site) break;
-                site_per_faixas2[f][faixa] = remove_element(site_per_faixas2[f][faixa],n_faixas2[f][faixa],i);
-                n_faixas2[f][faixa]--;
+
+            // Se têm nós na faixa etária "faixa" e podem receber ligações da faixa etária f
+            if(n_faixas[faixa][f] == 0) continue;
+
+            site_per_faixas[faixa][f] = randomize(site_per_faixas[faixa][f], n_faixas[faixa][f],seed);
+
+            G = weighted_add_edge(&G,1,&MCE,n_faixas[faixa],site_per_faixas[faixa][f],site,faixa,&faixas,&edges);
+            if(is_undirect){
+                if(MCE.degree_out[site][faixa] == 0){
+                    for (i = 0; i < n_faixas[f][faixa]; i++) if( site_per_faixas[f][faixa][i] == site) break;
+                    site_per_faixas[f][faixa] = remove_element(site_per_faixas[f][faixa],n_faixas[f][faixa],i);
+                    n_faixas[f][faixa]--;
+                }
+
             }
         }
         if(p > 0){
@@ -442,10 +462,20 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
 
                 f = VECTOR(faixas)[vizinho];
                 for(j = 0;j < MCE.categorias;j++){
-                    if(MCE.degree_out[vizinho][j] != 0){
-                        n_faixas_vizinhos[f][j]++;
-                        site_per_faixas_vizinhos[f][j] = realloc(site_per_faixas_vizinhos[f][j],n_faixas_vizinhos[f][j]*sizeof(int));
-                        site_per_faixas_vizinhos[f][j][n_faixas_vizinhos[f][j] - 1] = vizinho;
+                    if(is_undirect){
+                        if(MCE.degree_out[vizinho][j] != 0){
+                            n_faixas_vizinhos[f][j]++;
+                            site_per_faixas_vizinhos[f][j] = realloc(site_per_faixas_vizinhos[f][j],n_faixas_vizinhos[f][j]*sizeof(int));
+                            site_per_faixas_vizinhos[f][j][n_faixas_vizinhos[f][j] - 1] = vizinho;
+                        }
+
+                    }
+                    if(!is_undirect){
+                        if(MCE.degree_in[vizinho][j] != 0){
+                            n_faixas_vizinhos[f][j]++;
+                            site_per_faixas_vizinhos[f][j] = realloc(site_per_faixas_vizinhos[f][j],n_faixas_vizinhos[f][j]*sizeof(int));
+                            site_per_faixas_vizinhos[f][j][n_faixas_vizinhos[f][j] - 1] = vizinho;
+                        }
                     }
                 }
                 
@@ -457,14 +487,18 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
                     seed++;
 
                     if(MCE.degree_out[vizinho][faixa] == 0) continue;
-                    if(n_faixas_vizinhos[faixa][f] == 0) break;
+                    if(n_faixas_vizinhos[faixa][f] == 0) continue;
                     site_per_faixas_vizinhos[faixa][f] = randomize(site_per_faixas_vizinhos[faixa][f], n_faixas_vizinhos[faixa][f],seed);
                     G = weighted_add_edge(&G,p,&MCE,n_faixas_vizinhos[faixa],site_per_faixas_vizinhos[faixa][f],vizinho,faixa,&faixas,&edges);
-                    if(MCE.degree_out[vizinho][faixa] == 0){
-                        for (k = 0; k < n_faixas_vizinhos[f][faixa]; k++) if( site_per_faixas_vizinhos[f][faixa][k] == vizinho) break;
-                        site_per_faixas_vizinhos[f][faixa] = remove_element(site_per_faixas_vizinhos[f][faixa],n_faixas_vizinhos[f][faixa],k);
-                        n_faixas_vizinhos[f][faixa]--;
+                    if(is_undirect){
+                        if(MCE.degree_out[vizinho][faixa] == 0){
+                            for (k = 0; k < n_faixas_vizinhos[f][faixa]; k++) if( site_per_faixas_vizinhos[f][faixa][k] == vizinho) break;
+                            site_per_faixas_vizinhos[f][faixa] = remove_element(site_per_faixas_vizinhos[f][faixa],n_faixas_vizinhos[f][faixa],k);
+                            n_faixas_vizinhos[f][faixa]--;
+                        }
+
                     }
+                    
                 }
             }
             for (i = 0; i < categorias; i++) {
@@ -497,12 +531,12 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     igraph_vector_destroy(&faixas);
 
     for (i = 0; i < categorias; i++) {
-        for (j = 0; j < categorias; j++)if(n_faixas2[i][j]!=0) free(site_per_faixas2[i][j]);
-        free(n_faixas2[i]);
-        free(site_per_faixas2[i]);
+        for (j = 0; j < categorias; j++)if(n_faixas[i][j]!=0) free(site_per_faixas[i][j]);
+        free(n_faixas[i]);
+        free(site_per_faixas[i]);
     }
-    free(n_faixas2);
-    free(site_per_faixas2);
+    free(n_faixas);
+    free(site_per_faixas);
     return Grafo;
 }
 
@@ -565,13 +599,13 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
     double mediana = (N%2 == 0)? VECTOR(degrees)[(int)(N-1)/2] : (VECTOR(degrees)[(int) N/2] + VECTOR(degrees)[(int) N/2+1])*0.5;
 
     // Calcula o menor caminho médio da Rede
-    //igraph_average_path_length(Grafo, &caminho_medio, NULL, IGRAPH_UNDIRECTED, 1);
+    igraph_average_path_length(Grafo, &caminho_medio, NULL, IGRAPH_UNDIRECTED, 1);
 
     // Calcula o diâmetro da rede
-    //igraph_diameter(Grafo, &diametro, 0, 0, 0, 0, IGRAPH_UNDIRECTED, 1);
+    //if(N<25000)igraph_diameter(Grafo, &diametro, 0, 0, 0, 0, IGRAPH_UNDIRECTED, 1);
 
     // Calcula o agrupamento médio
-    igraph_transitivity_avglocal_undirected(Grafo,&agrupamento_medio,IGRAPH_TRANSITIVITY_ZERO);
+    //if(N<25000)igraph_transitivity_avglocal_undirected(Grafo,&agrupamento_medio,IGRAPH_TRANSITIVITY_ZERO);
 
     // Calcula o agrupamento total
     igraph_transitivity_undirected(Grafo,&agrupamento_total,IGRAPH_TRANSITIVITY_NAN);
@@ -603,8 +637,8 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
     
     double perca;
     int count = 0;
-    omp_set_num_threads(11);
-    #pragma omp parallel for schedule(dynamic)
+    //omp_set_num_threads(11);
+    //#pragma omp parallel for schedule(dynamic)
     for (i = 0; i < redes; i++){
         clock_t inicio, fim;
         inicio = clock();
@@ -622,6 +656,7 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
             double agrupamento_total;
             igraph_transitivity_undirected(&G,&agrupamento_total,IGRAPH_TRANSITIVITY_NAN);
             printf("Agrupamento: %f\n",agrupamento_total);
+            printf("Perda: %f\n",perca);
         }
         igraph_destroy(&G);
         count++;
@@ -653,5 +688,5 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
         for(i = 0; i < redes; i++) free(resultados[i]);
         free(resultados);
     }
-    printf("Terminou %d %.2f\n",N,p);
+    printf("Terminou N: %d Probability:%.2f\n",N,p);
 }
