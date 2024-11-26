@@ -524,6 +524,7 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
         free(MCE.degree_out[i]);
         free(G.viz[i]);
     }
+    
     free(G.viz);
     if(!MCE.is_undirect) free(MCE.degree_in);
     free(MCE.degree_out);
@@ -537,6 +538,9 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     }
     free(n_faixas);
     free(site_per_faixas);
+
+
+
     return Grafo;
 }
 
@@ -565,8 +569,8 @@ double calcular_correlacao(igraph_vector_t* vetor1, igraph_vector_t* vetor2) {
 
 void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
 
-    double caminho_medio;
-    double diametro;
+    double caminho_medio = 0;
+    double diametro = 0;
     double agrupamento_medio;
     double agrupamento_total;
     double correlation;
@@ -598,14 +602,20 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
     igraph_vector_sort(&graus);
     double mediana = (N%2 == 0)? VECTOR(degrees)[(int)(N-1)/2] : (VECTOR(degrees)[(int) N/2] + VECTOR(degrees)[(int) N/2+1])*0.5;
 
-    // Calcula o menor caminho médio da Rede
-    igraph_average_path_length(Grafo, &caminho_medio, NULL, IGRAPH_UNDIRECTED, 1);
 
-    // Calcula o diâmetro da rede
-    //if(N<25000)igraph_diameter(Grafo, &diametro, 0, 0, 0, 0, IGRAPH_UNDIRECTED, 1);
+    igraph_matrix_t distance;
+    igraph_matrix_init(&distance, 0, 0);
+    igraph_distances(Grafo, &distance, igraph_vss_all(), igraph_vss_all(), IGRAPH_ALL);
+    for (int i = 0; i < N; i++){
+        for (int j = i+1; j < N; j++){
+            if(MATRIX(distance, i, j) == IGRAPH_INFINITY) continue;
+            caminho_medio += MATRIX(distance, i, j);
+            if(MATRIX(distance, i, j) > diametro) diametro = MATRIX(distance, i, j);
+        }
+    }
 
     // Calcula o agrupamento médio
-    //if(N<25000)igraph_transitivity_avglocal_undirected(Grafo,&agrupamento_medio,IGRAPH_TRANSITIVITY_ZERO);
+    igraph_transitivity_avglocal_undirected(Grafo,&agrupamento_medio,IGRAPH_TRANSITIVITY_ZERO);
 
     // Calcula o agrupamento total
     igraph_transitivity_undirected(Grafo,&agrupamento_total,IGRAPH_TRANSITIVITY_NAN);
@@ -615,11 +625,12 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
     resultados[3] = agrupamento_medio;
     resultados[4] = agrupamento_total;
     resultados[5] = correlation;
-    resultados[6] = 0;
-    resultados[7] = 0;
+    resultados[6] = caminho_medio/(N*(N-1));
+    resultados[7] = diametro;
     igraph_vector_destroy(&graus);
     igraph_vector_destroy(&clustering);
     igraph_vector_int_destroy(&degrees);
+    igraph_matrix_destroy(&distance);
 
 }
 
@@ -637,18 +648,18 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
     
     double perca;
     int count = 0;
-    //omp_set_num_threads(11);
-    //#pragma omp parallel for schedule(dynamic)
+    omp_set_num_threads(11);
+    #pragma omp parallel for schedule(dynamic)
     for (i = 0; i < redes; i++){
         clock_t inicio, fim;
         inicio = clock();
         //if(redes!=1) printf("\e[1;1H\e[2J");
         igraph_t G;
         G = local_configuration_model(N,is_undirect,p,seed+i,&perca);
-        
+        int Nodes = igraph_vcount(&G);
         if(redes!=1){
             fim = clock();
-            calcula_propriedades(&G,p,N,resultados[i]);
+            calcula_propriedades(&G,p,Nodes,resultados[i]);
             resultados[i][8] = ((double) (fim - inicio)) / CLOCKS_PER_SEC;
             resultados[i][9] = perca;
         }
@@ -668,7 +679,7 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
         int j;
         char filecheck[800];
         if(is_undirect)sprintf(filecheck,"./output/resultados_POYLMOD_%d_%.2f.txt",N,p);
-        else sprintf(filecheck,"./output/resultados_blogs_%d_%.2f.txt",N,p);
+        else sprintf(filecheck,"./output/blogs/resultados_blogs_%d_%.2f.txt",N,p);
         file = fopen(filecheck,"w");
         char linha[10000];
         linha[0] = '\0';
