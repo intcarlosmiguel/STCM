@@ -519,6 +519,7 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     igraph_add_edges(&Grafo, &edges, NULL);
     
     *perca = generate_conections(&G,&MCE,&faixas,p,&Grafo);
+
     for (i = 0; i < G.Nodes; i++){
         if(!MCE.is_undirect)free(MCE.degree_in[i]);
         free(MCE.degree_out[i]);
@@ -596,6 +597,7 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
     igraph_vector_scale(&graus,1/N);
 
     double std = 0 ;
+    int n = 0;
     for (int i = 0; i < N; i++) std += pow((double)VECTOR(degrees)[i],2);
     std = std/N;
     // Mediana dos graus
@@ -605,12 +607,24 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
 
     igraph_matrix_t distance;
     igraph_matrix_init(&distance, 0, 0);
-    igraph_distances(Grafo, &distance, igraph_vss_all(), igraph_vss_all(), IGRAPH_ALL);
-    for (int i = 0; i < N; i++){
-        for (int j = i+1; j < N; j++){
+    igraph_vs_t vs;
+    igraph_vs_range(&vs, 0, 1e4);
+    // shortest path with 50.000 first nodes
+
+    igraph_distances(Grafo, &distance,vs,vs, IGRAPH_ALL);
+    for (int i = 0; i < 1e4; i++){
+        for (int j = i+1; j < 1e4; j++){
             if(MATRIX(distance, i, j) == IGRAPH_INFINITY) continue;
+
+            n += 1;
             caminho_medio += MATRIX(distance, i, j);
             if(MATRIX(distance, i, j) > diametro) diametro = MATRIX(distance, i, j);
+
+            if(MATRIX(distance, j, i) == IGRAPH_INFINITY) continue;
+            
+            n += 1;
+            caminho_medio += MATRIX(distance, j, i);
+            if(MATRIX(distance, j, i) > diametro) diametro = MATRIX(distance, j, i);
         }
     }
 
@@ -625,12 +639,13 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
     resultados[3] = agrupamento_medio;
     resultados[4] = agrupamento_total;
     resultados[5] = correlation;
-    resultados[6] = caminho_medio/(N*(N-1));
+    resultados[6] = caminho_medio/n;
     resultados[7] = diametro;
     igraph_vector_destroy(&graus);
     igraph_vector_destroy(&clustering);
     igraph_vector_int_destroy(&degrees);
     igraph_matrix_destroy(&distance);
+
 
 }
 
@@ -648,7 +663,7 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
     
     double perca;
     int count = 0;
-    omp_set_num_threads(11);
+    omp_set_num_threads(9);
     #pragma omp parallel for schedule(dynamic)
     for (i = 0; i < redes; i++){
         clock_t inicio, fim;
