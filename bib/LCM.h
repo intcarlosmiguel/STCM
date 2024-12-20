@@ -238,7 +238,6 @@ void print_lig(struct mce *MCE, igraph_vector_t* faixas,int N){
 double generate_conections(struct Graph *G,struct mce *MCE, igraph_vector_t* faixas,double p,igraph_t* Grafo){
     double ligacoes_total = 0;
     int i,j;
-
     for (i = 0; i < G->Nodes; i++){
         if(MCE->is_undirect){
             ligacoes_total += somatorio(MCE->degree_out,i,MCE->categorias);
@@ -369,6 +368,7 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     G.edges = 0;
 
     MCE.is_undirect = is_undirect;
+    char filename[200];
     if(is_undirect){
         G.Nodes = N;
         G.viz = (int **)malloc(N*sizeof(int*));
@@ -386,6 +386,15 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
         G.viz = (int **)malloc(N*1224*sizeof(int*));
         igraph_vector_init(&faixas, 1224*N);
         load_test(&MCE,&faixas,N,&G);
+        
+        /* if(is_undirect) sprintf(filename,"./output/POLYMOD/in_matrix_%d.txt",N);
+        else sprintf(filename,"./output/blogs/matrix/in_matrix_%d_%.2f.txt",N,p);
+        in = fopen(filename,"a");
+        
+        if(is_undirect) sprintf(filename,"./output/POLYMOD/out_matrix_%d.txt",N);
+        else sprintf(filename,"./output/blogs/matrix/out_matrix_%d_%.2f.txt",N,p);
+        out = fopen(filename,"a"); */
+        
         N *= 1224;
         G.Nodes = N;
     }
@@ -519,13 +528,35 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     igraph_add_edges(&Grafo, &edges, NULL);
     
     *perca = generate_conections(&G,&MCE,&faixas,p,&Grafo);
+    
+    /* for (i = 0; i < G.Nodes; i++){
+        //get the sucessors of the node i
+        igraph_vector_int_t sucessors;
+        igraph_vector_int_init(&sucessors, 0);
+        igraph_neighbors(&Grafo, &sucessors, i, IGRAPH_OUT);
 
-    for (i = 0; i < G.Nodes; i++){
+        int* connections = (int*) calloc(MCE.categorias,sizeof(int));
+        for (j = 0; j < igraph_vector_int_size(&sucessors); j++) connections[(int) VECTOR(faixas)[VECTOR(sucessors)[j]]]++;
+        fprintf(out,"%d %d %d\n",(int) VECTOR(faixas)[i],connections[0],connections[1]);
+        free(connections);
+        igraph_vector_int_destroy(&sucessors);
+
+        // get the predecessors of the node i
+        igraph_vector_int_t predecessors;
+        igraph_vector_int_init(&predecessors, 0);
+        igraph_neighbors(&Grafo, &predecessors, i, IGRAPH_IN);
+
+        int* connections_in = (int*) calloc(MCE.categorias,sizeof(int));
+        for (j = 0; j < igraph_vector_int_size(&predecessors); j++) connections_in[(int) VECTOR(faixas)[VECTOR(predecessors)[j]]]++;
+        fprintf(in,"%d %d %d\n",(int) VECTOR(faixas)[i],connections_in[0],connections_in[1]);
+        
+        free(connections_in);
+        igraph_vector_int_destroy(&predecessors);
+
         if(!MCE.is_undirect)free(MCE.degree_in[i]);
         free(MCE.degree_out[i]);
         free(G.viz[i]);
-    }
-    
+    } */
     free(G.viz);
     if(!MCE.is_undirect) free(MCE.degree_in);
     free(MCE.degree_out);
@@ -605,29 +636,11 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
     double mediana = (N%2 == 0)? VECTOR(degrees)[(int)(N-1)/2] : (VECTOR(degrees)[(int) N/2] + VECTOR(degrees)[(int) N/2+1])*0.5;
 
 
-    igraph_matrix_t distance;
-    igraph_matrix_init(&distance, 0, 0);
-    igraph_vs_t vs;
-    igraph_vs_range(&vs, 0, 1e4);
-    // shortest path with 50.000 first nodes
+    // calculate the mean shortest path
+    igraph_average_path_length(Grafo, &caminho_medio, NULL, IGRAPH_UNDIRECTED, 1);
 
-    igraph_distances(Grafo, &distance,vs,vs, IGRAPH_ALL);
-    for (int i = 0; i < 1e4; i++){
-        for (int j = i+1; j < 1e4; j++){
-            if(MATRIX(distance, i, j) == IGRAPH_INFINITY) continue;
-
-            n += 1;
-            caminho_medio += MATRIX(distance, i, j);
-            if(MATRIX(distance, i, j) > diametro) diametro = MATRIX(distance, i, j);
-
-            if(MATRIX(distance, j, i) == IGRAPH_INFINITY) continue;
-            
-            n += 1;
-            caminho_medio += MATRIX(distance, j, i);
-            if(MATRIX(distance, j, i) > diametro) diametro = MATRIX(distance, j, i);
-        }
-    }
-
+    // Calcula o diâmetro da rede
+    igraph_diameter(Grafo, &diametro, 0, 0, 0, 0, IGRAPH_UNDIRECTED, 1);
     // Calcula o agrupamento médio
     igraph_transitivity_avglocal_undirected(Grafo,&agrupamento_medio,IGRAPH_TRANSITIVITY_ZERO);
 
@@ -639,12 +652,11 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
     resultados[3] = agrupamento_medio;
     resultados[4] = agrupamento_total;
     resultados[5] = correlation;
-    resultados[6] = caminho_medio/n;
+    resultados[6] = caminho_medio;
     resultados[7] = diametro;
     igraph_vector_destroy(&graus);
     igraph_vector_destroy(&clustering);
     igraph_vector_int_destroy(&degrees);
-    igraph_matrix_destroy(&distance);
 
 
 }
@@ -663,7 +675,7 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
     
     double perca;
     int count = 0;
-    omp_set_num_threads(9);
+    omp_set_num_threads(7);
     #pragma omp parallel for schedule(dynamic)
     for (i = 0; i < redes; i++){
         clock_t inicio, fim;
@@ -693,8 +705,8 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
         FILE *file;
         int j;
         char filecheck[800];
-        if(is_undirect)sprintf(filecheck,"./output/resultados_POYLMOD_%d_%.2f.txt",N,p);
-        else sprintf(filecheck,"./output/blogs/resultados_blogs_%d_%.2f.txt",N,p);
+        if(is_undirect)sprintf(filecheck,"./output/POLYMOD/metrics/resultados_POYLMOD_%d_%.2f.txt",N,p);
+        else sprintf(filecheck,"./output/blogs/metrics/resultados_blogs_%d_%.2f.txt",N,p);
         file = fopen(filecheck,"w");
         char linha[10000];
         linha[0] = '\0';
