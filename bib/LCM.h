@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <omp.h>
+#include <unistd.h>
 
 #include <igraph.h>
 #include "mtwister.h"
@@ -235,19 +236,12 @@ void print_lig(struct mce *MCE, igraph_vector_t* faixas,int N){
 
 }
 
-double generate_conections(struct Graph *G,struct mce *MCE, igraph_vector_t* faixas,double p,igraph_t* Grafo){
+double generate_conections(struct Graph *G,struct mce *MCE, igraph_vector_t* faixas,double p,igraph_t* Grafo,double total_edges){
     double ligacoes_total = 0;
     int i,j;
-    for (i = 0; i < G->Nodes; i++){
-        if(MCE->is_undirect){
-            ligacoes_total += somatorio(MCE->degree_out,i,MCE->categorias);
-        }
-        else{
-            //ligacoes_total += somatorio(MCE->degree_out,i,MCE->categorias);
-            ligacoes_total += somatorio(MCE->degree_in,i,MCE->categorias);
-        }
-    }
-    return (double)ligacoes_total/(G->edges);
+    for (i = 0; i < G->Nodes; i++) ligacoes_total += somatorio(MCE->degree_out,i,MCE->categorias);
+    if(MCE->is_undirect) (double)ligacoes_total/(2*total_edges);
+    return (double)ligacoes_total/(total_edges);
 }
 
 bool check_ligacao(struct Graph *G,int site,int vizinho){
@@ -362,13 +356,21 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     init_genrand64(seed);
 
     struct Graph G;
+    double total_edges = 0;
     struct mce MCE;
     igraph_vector_t faixas;
     int i = 0,j = 0,k = 0,categorias = 0,f;
     G.edges = 0;
-
+    FILE* in;
+    FILE* out;
     MCE.is_undirect = is_undirect;
     char filename[200];
+    if(!is_undirect) sprintf(filename,"./output/blogs/matrix/in_matrix_%d_%.2f.txt",N,p);
+    if(!is_undirect) in = fopen(filename,"a");
+    
+    if(is_undirect) sprintf(filename,"./output/POLYMOD/matrix/out_matrix_%d_%.2f.txt",N,p);
+    else sprintf(filename,"./output/blogs/matrix/out_matrix_%d_%.2f.txt",N,p);
+    out = fopen(filename,"a");
     if(is_undirect){
         G.Nodes = N;
         G.viz = (int **)malloc(N*sizeof(int*));
@@ -387,18 +389,11 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
         igraph_vector_init(&faixas, 1224*N);
         load_test(&MCE,&faixas,N,&G);
         
-        /* if(is_undirect) sprintf(filename,"./output/POLYMOD/in_matrix_%d.txt",N);
-        else sprintf(filename,"./output/blogs/matrix/in_matrix_%d_%.2f.txt",N,p);
-        in = fopen(filename,"a");
         
-        if(is_undirect) sprintf(filename,"./output/POLYMOD/out_matrix_%d.txt",N);
-        else sprintf(filename,"./output/blogs/matrix/out_matrix_%d_%.2f.txt",N,p);
-        out = fopen(filename,"a"); */
-        
-        N *= 1224;
+        N *= 793;
         G.Nodes = N;
     }
-
+    
     int** n_faixas = calloc(categorias,sizeof(int*));
     int*** site_per_faixas = malloc(categorias*sizeof(int**));
     for ( i = 0; i < MCE.categorias; i++){
@@ -408,6 +403,7 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     }
     for(i = 0; i < G.Nodes; i++){
         f = VECTOR(faixas)[i];
+        total_edges += somatorio(MCE.degree_out,i,MCE.categorias);
         for(j = 0;j < MCE.categorias;j++){
             if(is_undirect){
                 if(MCE.degree_out[i][j] != 0){
@@ -527,36 +523,53 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     else igraph_empty(&Grafo, G.Nodes, IGRAPH_DIRECTED);
     igraph_add_edges(&Grafo, &edges, NULL);
     
-    *perca = generate_conections(&G,&MCE,&faixas,p,&Grafo);
-    
-    /* for (i = 0; i < G.Nodes; i++){
+    *perca = generate_conections(&G,&MCE,&faixas,p,&Grafo,total_edges);
+    for (i = 0; i < G.Nodes; i++){
         //get the sucessors of the node i
-        igraph_vector_int_t sucessors;
-        igraph_vector_int_init(&sucessors, 0);
-        igraph_neighbors(&Grafo, &sucessors, i, IGRAPH_OUT);
+        if(!MCE.is_undirect){
+            igraph_vector_int_t sucessors;
+            igraph_vector_int_init(&sucessors, 0);
+            igraph_neighbors(&Grafo, &sucessors, i, IGRAPH_OUT);
 
-        int* connections = (int*) calloc(MCE.categorias,sizeof(int));
-        for (j = 0; j < igraph_vector_int_size(&sucessors); j++) connections[(int) VECTOR(faixas)[VECTOR(sucessors)[j]]]++;
-        fprintf(out,"%d %d %d\n",(int) VECTOR(faixas)[i],connections[0],connections[1]);
-        free(connections);
-        igraph_vector_int_destroy(&sucessors);
+            int* connections = (int*) calloc(MCE.categorias,sizeof(int));
+            for (j = 0; j < igraph_vector_int_size(&sucessors); j++) connections[(int) VECTOR(faixas)[VECTOR(sucessors)[j]]]++;
+            fprintf(out,"%d %d %d\n",(int) VECTOR(faixas)[i],connections[0],connections[1]);
+            free(connections);
+            igraph_vector_int_destroy(&sucessors);
 
-        // get the predecessors of the node i
-        igraph_vector_int_t predecessors;
-        igraph_vector_int_init(&predecessors, 0);
-        igraph_neighbors(&Grafo, &predecessors, i, IGRAPH_IN);
+            // get the predecessors of the node i
+            igraph_vector_int_t predecessors;
+            igraph_vector_int_init(&predecessors, 0);
+            igraph_neighbors(&Grafo, &predecessors, i, IGRAPH_IN);
 
-        int* connections_in = (int*) calloc(MCE.categorias,sizeof(int));
-        for (j = 0; j < igraph_vector_int_size(&predecessors); j++) connections_in[(int) VECTOR(faixas)[VECTOR(predecessors)[j]]]++;
-        fprintf(in,"%d %d %d\n",(int) VECTOR(faixas)[i],connections_in[0],connections_in[1]);
-        
-        free(connections_in);
-        igraph_vector_int_destroy(&predecessors);
+            int* connections_in = (int*) calloc(MCE.categorias,sizeof(int));
+            for (j = 0; j < igraph_vector_int_size(&predecessors); j++) connections_in[(int) VECTOR(faixas)[VECTOR(predecessors)[j]]]++;
+            fprintf(in,"%d %d %d\n",(int) VECTOR(faixas)[i],connections_in[0],connections_in[1]);
+            
+            free(connections_in);
+            igraph_vector_int_destroy(&predecessors);
 
-        if(!MCE.is_undirect)free(MCE.degree_in[i]);
-        free(MCE.degree_out[i]);
-        free(G.viz[i]);
-    } */
+            if(!MCE.is_undirect)free(MCE.degree_in[i]);
+            free(MCE.degree_out[i]);
+            free(G.viz[i]);
+
+        }
+        else{
+            
+            int* connections = (int*) calloc(MCE.categorias,sizeof(int));
+            for (j = 0; j < G.viz[i][0]; j++) connections[(int) VECTOR(faixas)[G.viz[i][j+1]]]++;
+            fprintf(out,"%d %d %d %d %d %d\n",(int) VECTOR(faixas)[i],connections[0],connections[1],connections[2],connections[3],connections[4]);
+            
+            /*for (j = 0; j < MCE.categorias; j++){
+                if(j != MCE.categorias-1)fprintf(out,"%d ",connections[j]);
+                else fprintf(out,"%d\n",connections[j]);
+            }*/
+            
+            free(connections);
+        }
+    }
+    if(!MCE.is_undirect)fclose(in);
+    fclose(out);
     free(G.viz);
     if(!MCE.is_undirect) free(MCE.degree_in);
     free(MCE.degree_out);
@@ -664,6 +677,28 @@ void calcula_propriedades(igraph_t *Grafo,double p,int N, double *resultados) {
 
 void generate_local_configuration_model(int N,bool is_undirect,double p, int redes,int seed){
 
+    char filename[200];
+    if(is_undirect) {
+        sprintf(filename, "./output/POLYMOD/matrix/out_matrix_%d_%.2f.txt", N, p);
+        if (access(filename, F_OK) == 0) {
+            remove(filename);
+            printf("Removendo arquivo %s\n", filename);
+        }
+
+    }
+    else{
+        sprintf(filename, "./output/blogs/matrix/in_matrix_%d_%.2f.txt", N, p);
+        if (access(filename, F_OK) == 0) {
+            remove(filename);
+            printf("Removendo arquivo %s\n", filename);
+        }
+        sprintf(filename, "./output/blogs/matrix/out_matrix_%d_%.2f.txt", N, p);
+        if (access(filename, F_OK) == 0) {
+            remove(filename);
+            printf("Removendo arquivo %s\n", filename);
+        }
+    }
+
     int i;
     double a;
     double** resultados;
@@ -675,19 +710,17 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
     
     double perca;
     int count = 0;
-    omp_set_num_threads(7);
-    #pragma omp parallel for schedule(dynamic)
+    //omp_set_num_threads(2);
+    //#pragma omp parallel for schedule(dynamic)
     for (i = 0; i < redes; i++){
-        clock_t inicio, fim;
-        inicio = clock();
+        double tempo = omp_get_wtime();
         //if(redes!=1) printf("\e[1;1H\e[2J");
         igraph_t G;
         G = local_configuration_model(N,is_undirect,p,seed+i,&perca);
         int Nodes = igraph_vcount(&G);
         if(redes!=1){
-            fim = clock();
-            calcula_propriedades(&G,p,Nodes,resultados[i]);
-            resultados[i][8] = ((double) (fim - inicio)) / CLOCKS_PER_SEC;
+            //calcula_propriedades(&G,p,Nodes,resultados[i]);
+            resultados[i][8] = omp_get_wtime() - tempo;
             resultados[i][9] = perca;
         }
         else{
@@ -701,11 +734,13 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
         if(count%25 == 0) printf("%d/%d\n",count,redes);
     }
 
-    if(redes > 1){
+    /* if(redes > 1){
         FILE *file;
         int j;
         char filecheck[800];
-        if(is_undirect)sprintf(filecheck,"./output/POLYMOD/metrics/resultados_POYLMOD_%d_%.2f.txt",N,p);
+        if(is_undirect){
+            sprintf(filecheck,"./output/POLYMOD/metrics/resultados_POYLMOD_%d_%.2f.txt",N,p);
+        }
         else sprintf(filecheck,"./output/blogs/metrics/resultados_blogs_%d_%.2f.txt",N,p);
         file = fopen(filecheck,"w");
         char linha[10000];
@@ -725,6 +760,6 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
         fclose(file);
         for(i = 0; i < redes; i++) free(resultados[i]);
         free(resultados);
-    }
+    } */
     printf("Terminou N: %d Probability:%.2f\n",N,p);
 }

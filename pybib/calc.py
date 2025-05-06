@@ -2,6 +2,33 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+import os
+
+def process_files_to_dataframe(directory):
+    # Prepare an empty list to store the data
+    data = []
+    
+    # Iterate through files in the directory
+    for file_name in os.listdir(directory):
+        if file_name.startswith("resultados_") and file_name.endswith(".txt"):
+            # Extract components from the file name
+            parts = file_name.replace("resultados_", "").replace(".txt", "").split("_")
+            if len(parts) == 3:
+                base, network_size, probability = parts
+                # Append the extracted data
+                data.append({
+                    "file_name": file_name,
+                    "base": base,
+                    "network_size": int(network_size),
+                    "probability": float(probability)
+                })
+    
+    # Convert the data into a DataFrame
+    df = pd.DataFrame(data)
+    return df
+
 
 def load_gml(file_path):
     df = {}
@@ -144,8 +171,19 @@ def generate_distribution_byfaixas(contagem,faixas):
     faixas = faixas[graus>0]
     graus = graus[graus>0]
     B = contagem/(np.sum(contagem,axis = 1)[:, np.newaxis])
+    x  = np.copy(B)
     B = [np.mean(B[faixas == i,:],axis = 0) for i in np.unique(faixas)]
-    return B
+    return B,x
+
+def empiric_distribution(distribution, limit):
+    r = np.random.rand()  # Gera número aleatório uniforme em [0, 1)
+    n = 0
+    while r > distribution[n]:
+        n += 1
+        if n > limit:
+            return 0
+    return n
+
 def contar_ligacoes_out_por_categoria(grafo):
     """
     Cria um vetor onde cada coluna representa o número de ligações de saída 
@@ -179,3 +217,25 @@ def contar_ligacoes_out_por_categoria(grafo):
         resultado[no] = (ligacoes_com_peso_0, ligacoes_com_peso_1)
     
     return np.array(list(resultado.values()))
+def cumulative_distribution(x):
+    x = np.sort(x)
+    y = np.arange(1,len(x)+1)/len(x)
+    return x,y
+
+def get_faixa(idade):
+    faixas = np.array([ 20,30,50,70,1e8])
+    indices = np.searchsorted(faixas,idade,side='right')
+    indices= np.where(indices < len(faixas),indices,None)
+    return indices
+def LM(x,y,axs,color = 'reds'):
+    X = x.reshape(-1,1)
+    regressor = LinearRegression()
+    regressor.fit(X, y)
+    coeficientes = regressor.coef_[0]
+    intercepto = regressor.intercept_
+
+    # Calcular o coeficiente de determinação (R²)
+    r2 = regressor.score(X, y)
+    if(axs != -1):
+        axs.plot(x,x*coeficientes + intercepto,c = color,label = 'R² :{:.3f}, {:.3f}x + {:.3f}'.format(r2,coeficientes,intercepto))
+    return coeficientes,intercepto,r2
