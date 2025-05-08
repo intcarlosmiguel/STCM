@@ -69,7 +69,7 @@ def calculate_t_test(df, column_index, y_line):
         result.append([N, t_stat, p_value])
     return np.array(result)
 
-def plot_compara_p(pvalues,df, column, label_x, label_y,filename, title="", y_line = {}, test_t=False, ispercentage=False, ax=None,linear_regression = False):
+def plot_compara_p(pvalues,df, column, label_x, label_y,filename, title="", y_line = {}, test_t=False, ispercentage=False, ax=None,linear_regression = False,value = 0):
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 8))
     colors = ["#f1faee", "tab:cyan", "tab:brown", "tab:gray", "tab:olive", "tab:purple", "tab:brown", "tab:pink", "tab:gray", "tab:olive", "tab:cyan"]
@@ -84,7 +84,7 @@ def plot_compara_p(pvalues,df, column, label_x, label_y,filename, title="", y_li
         df_prob = df[df['probability'] == p]
         df_prob = df_prob.sort_values(by='probability')
         if(label_y == "Loss"):
-            result_prob = calculate_average_std(df_prob, 0,filename,13.509809339596574)
+            result_prob = calculate_average_std(df_prob, 0,filename,value)
         else:
             result_prob = calculate_average_std(df_prob, column,filename)
         if ispercentage:
@@ -116,17 +116,17 @@ def plot_compara_p(pvalues,df, column, label_x, label_y,filename, title="", y_li
                 else:
                     print("Não rejeitamos a hipótese nula. Não há evidências de diferença significativa.")
     
-    ax.set_xlabel(label_x, fontsize=35, fontproperties=prop_label)
-    ax.set_ylabel(label_y, fontsize=35, fontproperties=prop_label)
-    ax.tick_params(axis='both', which='major', labelsize=25)
+    ax.set_xlabel(label_x, fontsize=30, fontproperties=prop_label)
+    ax.set_ylabel(label_y, fontsize=30, fontproperties=prop_label)
+    ax.tick_params(axis='both', which='major', labelsize=20)
     for label in ax.get_xticklabels() + ax.get_yticklabels():
-        label.set_fontproperties({'size': 25, 'family': prop_ticks.get_name()})
+        label.set_fontproperties({'size': 20, 'family': prop_ticks.get_name()})
     if title:
         ax.set_title(title)
     if(len(pvalues) > 2):
-        ax.legend(loc='center right',bbox_to_anchor=(1.57, 0.8), fontsize=25, scatterpoints=1, markerscale=2,prop={'size': 25, 'family': prop_ticks.get_name()})
+        ax.legend(loc='center right',bbox_to_anchor=(1.57, 0.8), fontsize=20, scatterpoints=1, markerscale=2,prop={'size': 20, 'family': prop_ticks.get_name()})
     else:
-        ax.legend(loc='best', fontsize=25, scatterpoints=1, markerscale=2,prop={'size': 25, 'family': prop_ticks.get_name()})
+        ax.legend(loc='best', fontsize=20, scatterpoints=1, markerscale=2,prop={'size': 20, 'family': prop_ticks.get_name()})
     ax.grid(linestyle=':', linewidth=0.5, zorder=0)
 
 # Call the function
@@ -151,7 +151,7 @@ def plot_compara_size(
 
     sizes = np.sort(sizes)
     first = sizes[0]
-    first_ = 5*sizes[0]
+    first_ = 10*sizes[0]
     sizes = list(sizes[sizes%first_ == 0]) + list([first])
     sizes = np.sort(sizes)
     colors = ["tab:red", "tab:blue", "tab:green", "tab:orange", "tab:purple", "tab:brown", "tab:pink", "tab:gray", "tab:olive", "tab:cyan"]
@@ -163,7 +163,7 @@ def plot_compara_size(
         result = calculate_average_std_all_probabilities(df_size, column,filename)
         if ispercentage:
             result[:, 2] *= 100  # Convert to percentage
-        ax.scatter(result[:, 1], result[:, 2], edgecolors='k',color = cor, label=f'N = {i}', zorder=2)
+        ax.scatter(result[:, 1], result[:, 2], edgecolors='k',color = cor, label=f'N* = {i}' if i < 500 else f'N = {i}', zorder=2)
         if ispercentage:
             ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.0f}%'))
         if(df_size.shape[0] != 101):
@@ -183,15 +183,15 @@ def plot_compara_size(
         
     if y_line != 0:
         ax.axhline(y=y_line, color='r', linestyle='--', label=legend)
-    ax.set_xlabel(label_x, fontsize=35, fontproperties=prop_label)
-    ax.set_ylabel(label_y, fontsize=35, fontproperties=prop_label)
-    ax.tick_params(axis='both', which='major', labelsize=25)
+    ax.set_xlabel(label_x, fontsize=30, fontproperties=prop_label)
+    ax.set_ylabel(label_y, fontsize=30, fontproperties=prop_label)
+    ax.tick_params(axis='both', which='major', labelsize=20)
     if title != "":
         ax.set_title(title)
     for label in ax.get_xticklabels() + ax.get_yticklabels():
-        label.set_fontproperties({'size': 25, 'family': prop_ticks.get_name()})
+        label.set_fontproperties({'size': 20, 'family': prop_ticks.get_name()})
     
-    ax.legend(loc='center left', bbox_to_anchor=(1, 0.85), scatterpoints=1, markerscale=2, prop={'size': 25, 'family': prop_ticks.get_name()})
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.85), scatterpoints=1, markerscale=2, prop={'size': 20, 'family': prop_ticks.get_name()})
     ax.grid(linestyle=':', linewidth=0.5, zorder=0)
 
 def plot_test(

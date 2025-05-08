@@ -120,6 +120,14 @@ def calcular_graus_por_categoria(grafo, categoria):
     
     return np.array(graus_in),np.array(graus_out)
 
+def log_histogram(x,nbin = 100):
+
+    bin = np.logspace(np.log10(np.min(x)),np.log10(np.max(x)),nbin+1)
+    hist, bin_edges = np.histogram(x, bins=bin,density=True)
+    bin_centers = 0.5*(bin_edges[:-1] + bin_edges[1:])
+    
+
+
 def histogram(x):
     arr = np.arange(np.max(x))
     hist = np.zeros(len(arr))
