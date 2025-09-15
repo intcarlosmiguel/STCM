@@ -82,11 +82,15 @@ def plot_compara_p(pvalues,df, column, label_x, label_y,filename, title="", y_li
     for p,color in zip(pvalues,colors):
 
         df_prob = df[df['probability'] == p]
-        df_prob = df_prob.sort_values(by='probability')
+        df_prob = df_prob.sort_values(by='network_size')
         if(label_y == "Loss"):
             result_prob = calculate_average_std(df_prob, 0,filename,value)
         else:
             result_prob = calculate_average_std(df_prob, column,filename)
+        if(column == 3):
+            print(result_prob)
+        if(column == 4):
+            print(result_prob)
         if ispercentage:
             result_prob[:, 1] *= 100  # Convert to percentage
             result_prob[:, 2] *= 100  # Convert to percentage
@@ -138,7 +142,7 @@ def plot_compara_size(
         label_y,
         filename, 
         title="", 
-        y_line=0, 
+        y_line={}, 
         legend="", 
         ispercentage=False, 
         ax=None,
@@ -161,9 +165,15 @@ def plot_compara_size(
         df_size = df[df['network_size'] == i]
         df_size = df_size.sort_values(by='probability')
         result = calculate_average_std_all_probabilities(df_size, column,filename)
+
+        if(column == 3):
+            print(result)
+        if(column == 4):
+            print(result)
         if ispercentage:
             result[:, 2] *= 100  # Convert to percentage
         ax.scatter(result[:, 1], result[:, 2], edgecolors='k',color = cor, label=f'N* = {i}' if i < 500 else f'N = {i}', zorder=2)
+        ax.errorbar(result[:, 1], result[:, 2], yerr=result[:, 3], fmt='o', capsize=4, zorder=1, c='#432818')
         if ispercentage:
             ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.0f}%'))
         if(df_size.shape[0] != 101):
@@ -181,8 +191,11 @@ def plot_compara_size(
                 ax.plot(result[1:, 1],result[1:, 1]**a*10**b,c='yellow')
             print(r2,a,b)
         
-    if y_line != 0:
-        ax.axhline(y=y_line, color='r', linestyle='--', label=legend)
+    if len(y_line) != 0 :
+        linestyles = [':','--', '-.']
+        for key,linestyle in zip(y_line, linestyles):
+
+            ax.axhline(y=y_line[key], color='black', linestyle=linestyle, label=key)
     ax.set_xlabel(label_x, fontsize=30, fontproperties=prop_label)
     ax.set_ylabel(label_y, fontsize=30, fontproperties=prop_label)
     ax.tick_params(axis='both', which='major', labelsize=20)

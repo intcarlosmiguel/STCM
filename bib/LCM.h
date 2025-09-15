@@ -371,6 +371,7 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     if(is_undirect) sprintf(filename,"./output/POLYMOD/matrix/out_matrix_%d_%.2f.txt",N,p);
     else sprintf(filename,"./output/blogs/matrix/out_matrix_%d_%.2f.txt",N,p);
     out = fopen(filename,"a");
+    
     if(is_undirect){
         G.Nodes = N;
         G.viz = (int **)malloc(N*sizeof(int*));
@@ -383,15 +384,17 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
 
     }
     else{
+        int N_ = size_txt("./input/test/faixas.txt");
         categorias = 2;
         MCE.categorias = categorias;
-        G.viz = (int **)malloc(N*1224*sizeof(int*));
-        igraph_vector_init(&faixas, 1224*N);
+        G.viz = (int **)malloc(N*N_*sizeof(int*));
+        igraph_vector_init(&faixas, N_*N);
         load_test(&MCE,&faixas,N,&G);
         
         
-        N *= 793;
+        N *= N_;
         G.Nodes = N;
+
     }
     
     int** n_faixas = calloc(categorias,sizeof(int*));
@@ -423,6 +426,7 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
         }
         
     }
+    
     igraph_vector_int_t edges;
     igraph_vector_int_init(&edges, 0);
     int site;
@@ -519,29 +523,33 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
     
     igraph_t Grafo;
     igraph_set_attribute_table(&igraph_cattribute_table);
+    printf("Total edges to create: %.0f\n", total_edges);
     if(MCE.is_undirect) igraph_empty(&Grafo, G.Nodes, IGRAPH_UNDIRECTED);
     else igraph_empty(&Grafo, G.Nodes, IGRAPH_DIRECTED);
     igraph_add_edges(&Grafo, &edges, NULL);
     
     *perca = generate_conections(&G,&MCE,&faixas,p,&Grafo,total_edges);
+    printf("Generated connections: %f\n", *perca);
     for (i = 0; i < G.Nodes; i++){
         //get the sucessors of the node i
         if(!MCE.is_undirect){
             igraph_vector_int_t sucessors;
             igraph_vector_int_init(&sucessors, 0);
             igraph_neighbors(&Grafo, &sucessors, i, IGRAPH_OUT);
-
+            
             int* connections = (int*) calloc(MCE.categorias,sizeof(int));
-            for (j = 0; j < igraph_vector_int_size(&sucessors); j++) connections[(int) VECTOR(faixas)[VECTOR(sucessors)[j]]]++;
+            for (j = 0; j < G.viz[i][0]; j++){
+                connections[(int) VECTOR(faixas)[G.viz[i][j+1]]]++;
+            }
             fprintf(out,"%d %d %d\n",(int) VECTOR(faixas)[i],connections[0],connections[1]);
             free(connections);
             igraph_vector_int_destroy(&sucessors);
-
+            
             // get the predecessors of the node i
             igraph_vector_int_t predecessors;
             igraph_vector_int_init(&predecessors, 0);
             igraph_neighbors(&Grafo, &predecessors, i, IGRAPH_IN);
-
+            
             int* connections_in = (int*) calloc(MCE.categorias,sizeof(int));
             for (j = 0; j < igraph_vector_int_size(&predecessors); j++) connections_in[(int) VECTOR(faixas)[VECTOR(predecessors)[j]]]++;
             fprintf(in,"%d %d %d\n",(int) VECTOR(faixas)[i],connections_in[0],connections_in[1]);
@@ -555,7 +563,6 @@ igraph_t local_configuration_model(int N,bool is_undirect, double p,int seed,dou
 
         }
         else{
-            
             int* connections = (int*) calloc(MCE.categorias,sizeof(int));
             for (j = 0; j < G.viz[i][0]; j++) connections[(int) VECTOR(faixas)[G.viz[i][j+1]]]++;
             fprintf(out,"%d %d %d %d %d %d\n",(int) VECTOR(faixas)[i],connections[0],connections[1],connections[2],connections[3],connections[4]);
@@ -713,12 +720,13 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
     //omp_set_num_threads(2);
     //#pragma omp parallel for schedule(dynamic)
     for (i = 0; i < redes; i++){
+        printf("Gerando rede %d de %d\n",i+1,redes);
         double tempo = omp_get_wtime();
         //if(redes!=1) printf("\e[1;1H\e[2J");
         igraph_t G;
         G = local_configuration_model(N,is_undirect,p,seed+i,&perca);
         int Nodes = igraph_vcount(&G);
-        if(redes!=1){
+        /* if(redes!=1){
             //calcula_propriedades(&G,p,Nodes,resultados[i]);
             resultados[i][8] = omp_get_wtime() - tempo;
             resultados[i][9] = perca;
@@ -728,7 +736,7 @@ void generate_local_configuration_model(int N,bool is_undirect,double p, int red
             igraph_transitivity_undirected(&G,&agrupamento_total,IGRAPH_TRANSITIVITY_NAN);
             printf("Agrupamento: %f\n",agrupamento_total);
             printf("Perda: %f\n",perca);
-        }
+        } */
         igraph_destroy(&G);
         count++;
         if(count%25 == 0) printf("%d/%d\n",count,redes);
