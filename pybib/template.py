@@ -57,7 +57,7 @@ def calculate_average_std_all_probabilities(df, column_index,filename):
         df_prob = df[df['probability'] == prob]
         for file, N in zip(df_prob['file_name'], df_prob['network_size']):
             data = np.loadtxt(f'{filename}/{file}').T
-            media, std = np.mean(data[column_index]), np.std(data[column_index])
+            media, std = np.mean(data[column_index]), np.std(data[column_index], ddof=1)
             result.append([N, prob, media, std])
     return np.array(result)
 
@@ -87,10 +87,6 @@ def plot_compara_p(pvalues,df, column, label_x, label_y,filename, title="", y_li
             result_prob = calculate_average_std(df_prob, 0,filename,value)
         else:
             result_prob = calculate_average_std(df_prob, column,filename)
-        if(column == 3):
-            print(result_prob)
-        if(column == 4):
-            print(result_prob)
         if ispercentage:
             result_prob[:, 1] *= 100  # Convert to percentage
             result_prob[:, 2] *= 100  # Convert to percentage
@@ -128,7 +124,7 @@ def plot_compara_p(pvalues,df, column, label_x, label_y,filename, title="", y_li
     if title:
         ax.set_title(title)
     if(len(pvalues) > 2):
-        ax.legend(loc='center right',bbox_to_anchor=(1.57, 0.8), fontsize=20, scatterpoints=1, markerscale=2,prop={'size': 20, 'family': prop_ticks.get_name()})
+        ax.legend(loc='center right',bbox_to_anchor=(1.5, 0.7), fontsize=20, scatterpoints=1, markerscale=2,prop={'size': 20, 'family': prop_ticks.get_name()})
     else:
         ax.legend(loc='best', fontsize=20, scatterpoints=1, markerscale=2,prop={'size': 20, 'family': prop_ticks.get_name()})
     ax.grid(linestyle=':', linewidth=0.5, zorder=0)
@@ -166,10 +162,6 @@ def plot_compara_size(
         df_size = df_size.sort_values(by='probability')
         result = calculate_average_std_all_probabilities(df_size, column,filename)
 
-        if(column == 3):
-            print(result)
-        if(column == 4):
-            print(result)
         if ispercentage:
             result[:, 2] *= 100  # Convert to percentage
         ax.scatter(result[:, 1], result[:, 2], edgecolors='k',color = cor, label=f'N* = {i}' if i < 500 else f'N = {i}', zorder=2)

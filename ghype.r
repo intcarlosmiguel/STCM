@@ -9,10 +9,13 @@ if (length(args) == 0) {
   stop("Por favor, forneça o parâmetro 'size'. Uso: Rscript ghype.r <size>")
 }
 size <- as.numeric(args[1])
+num_networks <- 100
 
 nodes_df <- read.table(paste0("./input/gHypEG/nodes_", size, ".txt"), header = FALSE, col.names = c("node", "category"), stringsAsFactors = FALSE)
 edges_df <- read.table(paste0("./input/gHypEG/edges_", size, ".txt"), header = FALSE, col.names = c("from", "to"), stringsAsFactors = FALSE)
-
+number_of_edges <- nrow(edges_df)
+cat("Número de arestas lidas:", number_of_edges, "\n")
+cat("Degree esperado: ", number_of_edges / nrow(nodes_df), "\n")
 # Garantir que os labels sejam tratados como strings
 nodes_df$category <- as.character(nodes_df$category)
 
@@ -29,8 +32,9 @@ node_labels <- setNames(nodes_df$category, nodes_df$node)
 node_labels <- node_labels[rownames(adj_matrix)]
 
 # 4. Estimar os parâmetros com ghypernet
-model_params <- ghype(
-  graph = adj_matrix,
+model_params <- bccm(
+  adj = adj_matrix,      # Note que o argumento muda de 'graph' para 'adj' em algumas versões, ou mantenha graph se sua versão aceitar
+  labels = node_labels,  # <--- O INGREDIENTE ESSENCIAL
   directed = TRUE,
   selfloops = FALSE
 )
@@ -82,14 +86,29 @@ aggregated_proportions <- list(
   OUT = sapply(all_possible_labels, function(x) sapply(all_possible_labels, function(y) list(), simplify = FALSE), simplify = FALSE)
 )
 
-clust_coefs <- numeric(100); avg_clusts <- numeric(100); diams <- numeric(100); mean_paths <- numeric(100); avg_degrees <- numeric(100)
-
+clust_coefs <- numeric(num_networks); avg_clusts <- numeric(num_networks); diams <- numeric(num_networks); mean_paths <- numeric(num_networks); avg_degrees <- numeric(num_networks)
+corr_degree_clustering <- numeric(num_networks)
 # 6. Loop de Simulação
-for(i in 1:100) {
+for(i in 1:num_networks) {
   if(i %% 10 == 0) cat("Modelo", i, ": Processando...\n")
-  graph_sim_matrix <- rghype(1, model_params, seed = i+42*size)
+  graph_sim_matrix <- rghype(1, model_params, seed = i+42*size,multinomial = TRUE,m =number_of_edges)
   g_sim <- graph_from_adjacency_matrix(graph_sim_matrix, mode="directed")
-  V(g_sim)$category <- node_labels 
+  cat("Rede simulada", i, "- Nós:", vcount(g_sim), "- Arestas:", ecount(g_sim), "\n")
+  V(g_sim)$category <- node_labels
+  V(g_sim)$name <- as.character(1:vcount(g_sim))
+  total_loops <- sum(which_loop(g_sim))
+
+  total_multiples <- sum(which_multiple(g_sim))
+
+  cat(" - Self-loops encontrados:", total_loops, "\n")
+  cat(" - Arestas múltiplas encontradas:", total_multiples, "\n")
+  g_sim <- simplify(g_sim)
+  isolated_nodes <- which(degree(g_sim, mode = "all") == 0)
+  g_sim <- delete_vertices(g_sim, isolated_nodes)
+  # Ajustar node_labels para corresponder aos nós restantes no grafo
+  remaining_node_names <- V(g_sim)$name
+  new_node_labels <- node_labels[remaining_node_names]
+  V(g_sim)$category <- new_node_labels
   rm(graph_sim_matrix)
   
   proportions_this_sim <- calculate_dyadic_proportions(g_sim, all_possible_labels)
@@ -102,12 +121,22 @@ for(i in 1:100) {
   }
   
   clust_coefs[i] <- transitivity(g_sim, type="global"); avg_clusts[i] <- transitivity(g_sim, type="average"); diams[i] <- diameter(g_sim); mean_paths[i] <- mean_distance(g_sim); avg_degrees[i] <- mean(degree(g_sim))
+  node_degrees <- degree(g_sim, mode = "all")
+  local_clustering <- transitivity(g_sim, type = "local")
+  
+  # Calculate correlation, handling NaN values from local_clustering for nodes with degree < 2
+  valid_indices <- !is.na(local_clustering)
+  if(sum(valid_indices) > 2) { # Correlation requires at least 2 valid pairs
+    corr_degree_clustering[i] <- cor(node_degrees[valid_indices], local_clustering[valid_indices])
+  } else {
+    corr_degree_clustering[i] <- NA # Not enough data to compute correlation
+  }
   rm(g_sim)
 }
 
 # 7. Salvar resultados das métricas
-write.table(data.frame(avg_degrees, clust_coefs, avg_clusts, diams, mean_paths), 
-            file = paste0("output/gHypEG/gHypEG_results_", size, ".txt"), 
+write.table(data.frame(avg_degrees, clust_coefs, avg_clusts, diams, mean_paths, corr_degree_clustering), 
+            file = paste0("output/gHypEG/metrics/gHypEG_", size, ".txt"), 
             row.names = FALSE, col.names = FALSE, sep = " ")
 
 # ==============================================================================
@@ -125,7 +154,7 @@ for (file_label in all_possible_labels) {
     out_row_list[[target_label]] <- hist_data$counts
   }
   matrix_out <- do.call(rbind, out_row_list)
-  filename_out <- paste0("output/gHypEG/Matrix_gHypEG_out_", file_label, "_", size, ".txt")
+  filename_out <- paste0("output/gHypEG/matrix/Matrix_gHypEG_out_", file_label, "_", size, ".txt")
   write.table(matrix_out, file = filename_out, col.names = FALSE, row.names = FALSE, sep = " ")
 
   in_row_list <- list()
@@ -136,7 +165,7 @@ for (file_label in all_possible_labels) {
     in_row_list[[source_label]] <- hist_data$counts
   }
   matrix_in <- do.call(rbind, in_row_list)
-  filename_in <- paste0("output/gHypEG/Matrix_gHypEG_in_", file_label, "_", size, ".txt")
+  filename_in <- paste0("output/gHypEG/matrix/Matrix_gHypEG_in_", file_label, "_", size, ".txt")
   write.table(matrix_in, file = filename_in, col.names = FALSE, row.names = FALSE, sep = " ")
 }
 

@@ -12,18 +12,16 @@ def process_files_to_dataframe(directory):
     
     # Iterate through files in the directory
     for file_name in os.listdir(directory):
-        if file_name.startswith("resultados_") and file_name.endswith(".txt"):
             # Extract components from the file name
-            parts = file_name.replace("resultados_", "").replace(".txt", "").split("_")
-            if len(parts) == 3:
-                base, network_size, probability = parts
-                # Append the extracted data
-                data.append({
-                    "file_name": file_name,
-                    "base": base,
-                    "network_size": int(network_size),
-                    "probability": float(probability)
-                })
+        parts = file_name.replace("resultados_", "").replace(".txt", "").split("_")
+        base, network_size = parts[0], parts[1]
+        probability = parts[2] if len(parts) > 2 else 'N/A'
+        # Append the extracted data
+        data.append({
+            "file_name": file_name,
+            "network_size": int(network_size),
+            "probability": float(probability) if probability != 'N/A' else 'N/A'    
+        })
     
     # Convert the data into a DataFrame
     df = pd.DataFrame(data)
