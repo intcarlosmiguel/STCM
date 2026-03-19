@@ -1,12 +1,10 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 
 #include <omp.h>
 
-#include "bib/mtwister.h"
-#include "bib/calc.h"
-#include "bib/LCM.h"
+
+#include "bib/STCM.h"
 
 int main(int argc, char *argv[]) {
     // Verificar se todos os argumentos necessários estão presentes
@@ -23,7 +21,7 @@ int main(int argc, char *argv[]) {
     double prob = atof(argv[5]) / 100;
     printf("Seed: %d, N: %d, is_undirect: %d, redes: %d, prob: %.2f\n", seed, N, is_undirect, redes, prob);
     // Chamar a função de geração do modelo com os parâmetros validados
-    generate_local_configuration_model(N, is_undirect, prob, redes, seed);
+    generate_stochastic_configuration_model(N, is_undirect, prob, redes, seed);
     
     return 0;
 }

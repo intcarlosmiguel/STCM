@@ -5,20 +5,20 @@
 #include "mtwister.h"
 #include <string.h>
 #include <math.h>
-#include <igraph.h>
+#include <igraph/igraph.h>
 #include <stdint.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #define M_PI 3.14159265358979323846
 
-void swap(int *a, int *b){
+static void swap(int *a, int *b){
     int temp = *a;
     *a = *b;
     *b = temp;
 }
 
-int* randomize (int* array, int n,int seed){
+static int* randomize (int* array, int n,int seed){
     init_genrand64(seed);
     for (int i = n-1; i > 0; i--){
         int j = genrand64_int64() % (i+1);
@@ -26,7 +26,7 @@ int* randomize (int* array, int n,int seed){
     }
     return array;
 }
-void print_vetor(void* array,int N,int check){
+static void print_vetor(void* array,int N,int check){
     if(check == sizeof(int)){
         int* intArray = (int*)array;
         for (int i = 0; i < N; i++){
@@ -44,7 +44,7 @@ void print_vetor(void* array,int N,int check){
 }
 
 
-int size_txt(char *str){
+static int size_txt(char *str){
     FILE* f;
     int L = 0;
     char c;
@@ -53,7 +53,7 @@ int size_txt(char *str){
     return L;
 }
 
-void print_matrix(void** mat,int N,int n,int check){
+static void print_matrix(void** mat,int N,int n,int check){
     if(check == sizeof(int)){
         int** intMat = (int**)mat;
         printf("========================================================\n");
@@ -68,7 +68,7 @@ void print_matrix(void** mat,int N,int n,int check){
     }
     
 }
-void generate_multinomial(int n, int k, double *probabilities, int *outcomes) {
+static void generate_multinomial(int n, int k, double *probabilities, int *outcomes) {
     int i,j;
 
     // Gera os k-1 primeiros valores
@@ -81,7 +81,7 @@ void generate_multinomial(int n, int k, double *probabilities, int *outcomes) {
     // O último valor é determinado pelo resto
 }
 
-int empiric_distribution(double* distribution,int limit){
+static int empiric_distribution(double* distribution,int limit){
     double r = genrand64_real1();
     int n = 0;
     while(r > distribution[n]){
@@ -92,7 +92,7 @@ int empiric_distribution(double* distribution,int limit){
     return n;
 }
 
-void merge(int *temp_weights, int *labels, int l, int m, int r) {
+static void merge(int *temp_weights, int *labels, int l, int m, int r) {
     int i, j, k;
     int n1 = m - l + 1;
     int n2 = r - m;
@@ -160,7 +160,7 @@ void merge(int *temp_weights, int *labels, int l, int m, int r) {
 }
 
 // Função principal que implementa o MergeSort
-void mergeSort(int *temp_weights, int *labels, int l, int r) {
+static void mergeSort(int *temp_weights, int *labels, int l, int r) {
     if (l < r) {
         int m = l + (r - l) / 2;
 
@@ -172,7 +172,7 @@ void mergeSort(int *temp_weights, int *labels, int l, int r) {
         merge(temp_weights, labels, l, m, r);
     }
 }
-int somatorio(int** array,int elemento,int N){
+static int somatorio(int** array,int elemento,int N){
     int soma = 0;
     for (int i = 0; i < N; i++) soma += array[elemento][i];
     return soma;
