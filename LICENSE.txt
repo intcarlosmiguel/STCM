@@ -1,9 +1,9 @@
 Project Licensing
 
 This repository contains research code for the paper 
-P.I. Fierens and Leandro C. R�go, "Long-range assortativity".
+Carlos Miguel Moreira Gonçalves, Pablo Ignacio Fierens e Leandro chaves Rêgo, "Stratified configuration model for simulating networks".
 
-1. My Original Code: All source code authored by Pablo Ignacio Fierens is provided under 
+1. Original Code: All source code authored by Carlos Miguel Moreira Gonçalves and Pablo Ignacio Fierens is provided under 
 the MIT License. 
 
 2. Dependencies: This project uses the igraph C library, which is licensed under the 
@@ -15,7 +15,7 @@ with igraph, is subject to the requirements of the GPL.
 
 The MIT License (MIT)
 
-Copyright (c) 2026 Pablo Ignacio Fierens
+Copyright (c) 2026 Carlos Miguel Moreira Gonçalves
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
